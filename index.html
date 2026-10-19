@@ -122,6 +122,17 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px dashed var(
 .pod .who{font-size:26px;overflow-wrap:anywhere;text-align:center}
 .pod .blk{width:100%;background:var(--panel2);display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font-family:var(--px);font-size:16px;color:var(--coin);box-shadow:inset -4px -4px 0 rgba(0,0,0,.3),inset 4px 4px 0 rgba(255,255,255,.12)}
 .pod .pts{font-family:var(--px);font-size:10px;color:var(--dim)}
+/* reveal callouts + kahoot board */
+.calls{display:grid;gap:6px}
+.call{font-family:var(--px);font-size:11px;color:var(--coin);line-height:1.8}
+.call.big{font-size:14px;color:var(--pink);animation:blink 1s steps(2,jump-none) 3}
+.fire{color:var(--coin);font-size:.85em}
+.nm.ok .fire{color:#6b4300}
+.up{color:var(--good);font-family:var(--px);font-size:10px}.down{color:var(--bad);font-family:var(--px);font-size:10px}
+.kb .r{animation:slidein .45s steps(5,end) both}
+.kb .bar2 i{transition:width 1.4s steps(14,end)}
+.kb .nmx{font-size:26px}
+@keyframes slidein{from{transform:translateX(-40px);opacity:0}to{transform:none;opacity:1}}
 /* phone */
 .phone{max-width:520px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:14px}
 .field{display:grid;gap:6px}
@@ -303,13 +314,21 @@ let H=null,hostStatus='starting';
 const conns={};
 let allInFor=null;
 const hflow=[{t:'lobby'}];
-QUIZ.rounds.forEach((r,ri)=>{hflow.push({t:'round',r});QS.filter(q=>q.round===r.id).forEach(q=>hflow.push({t:'q',q}));if(ri<QUIZ.rounds.length-1)hflow.push({t:'board',r})});
+const EVERY=5;let qc=0;
+QUIZ.rounds.forEach((r,ri)=>{hflow.push({t:'round',r});const rq=QS.filter(q=>q.round===r.id);
+  rq.forEach((q,qi)=>{hflow.push({t:'q',q});qc++;if(qc%EVERY===0&&qi<rq.length-1)hflow.push({t:'board',mini:true,after:qc})});
+  if(ri<QUIZ.rounds.length-1)hflow.push({t:'board',r,after:qc})});
 hflow.push({t:'final'});
 const CODE_CH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode=()=>Array.from({length:4},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
 const saveH=()=>LS.set(HK,H);
 const joinURL=()=>location.origin+location.pathname+'?room='+H.code+MODEQ;
-const scoreOf=p=>H.revealedQs.reduce((s,id)=>s+((p.ans[id]&&p.ans[id].pts)||0),0);
+const ptsOf=a=>a?(a.pts||0)+(a.bonus||0):0;
+const scoreOf=p=>H.revealedQs.reduce((s,id)=>s+ptsOf(p.ans[id]),0);
+const qidsBefore=pos=>hflow.slice(0,pos).filter(x=>x.t==='q').map(x=>x.q.id);
+function rankAt(ids){const arr=Object.entries(H.players).map(([cid,p])=>({cid,name:p.name,score:ids.reduce((s,id)=>s+ptsOf(p.ans[id]),0)})).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'sv'));
+  let last=null,rank=0;arr.forEach((x,i)=>{if(x.score!==last){rank=i+1;last=x.score}x.rank=rank});return arr}
+function prevBoardPos(pos){for(let i=pos-1;i>0;i--)if(hflow[i].t==='board')return i;return 0}
 function ranked(){const arr=Object.entries(H.players).map(([cid,p])=>({cid,name:p.name,score:scoreOf(p)})).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'sv'));
   let last=null,rank=0;arr.forEach((x,i)=>{if(x.score!==last){rank=i+1;last=x.score}x.rank=rank});return arr}
 const cleanName=n=>String(n||'').replace(/[\u0000-\u001f<>]/g,'').replace(/\s+/g,' ').trim().slice(0,16);
@@ -357,7 +376,10 @@ function sendState(cid){
   if(it.t==='q'){const q=it.q,o=optionsFor(q),a=p.ans[q.id];
     m.qid=q.id;m.qn=q.n;m.q=q.q;m.round=roundOf(q.round).name;m.labels=o.map(x=>label(x.t));m.revealed=H.revealed;
     m.my=a?{c:a.c}:null;
-    if(H.revealed){m.correct=o.findIndex(x=>x.ok);if(a)m.my={c:a.c,pts:a.pts,ok:a.pts>0}}}
+    if(H.revealed){m.correct=o.findIndex(x=>x.ok);if(a)m.my={c:a.c,pts:a.pts,ok:a.pts>0,bonus:a.bonus||0,streak:a.streak||0};
+      const ev=(H.events||{})[q.id];if(ev&&ev.lost[cid])m.lost=ev.lost[cid]}}
+  if(it.t==='board'||it.t==='final'){const i=rk.findIndex(x=>x.cid===cid);if(i>0){const up=rk.slice(0,i).reverse().find(x=>x.score>me.score);if(up)m.ahead={name:up.name,gap:up.score-me.score}}
+    m.after=it.after;m.streak=p.streak||0;const prev=rankAt(qidsBefore(prevBoardPos(H.pos))).find(x=>x.cid===cid);if(prev&&prevBoardPos(H.pos)>0)m.moved=prev.rank-me.rank}
   if(it.t==='final')m.top=rk.slice(0,3).map(x=>x.name);
   c.send(m);
 }
@@ -365,7 +387,11 @@ const broadcast=()=>Object.keys(conns).forEach(sendState);
 
 function hAdvance(){
   const it=hflow[H.pos];
-  if(it.t==='q'&&!H.revealed){H.revealed=true;if(!H.revealedQs.includes(it.q.id))H.revealedQs.push(it.q.id);saveH();hrender();broadcast();sfx('reveal');
+  if(it.t==='q'&&!H.revealed){H.revealed=true;if(!H.revealedQs.includes(it.q.id)){const id=it.q.id,ev={lost:{}};
+      Object.entries(H.players).forEach(([cid,p])=>{const a=p.ans[id];
+        if(a&&a.pts>0){p.streak=(p.streak||0)+1;a.bonus=p.streak>=2?Math.min(300,100*(p.streak-1)):0;a.streak=p.streak}
+        else{if((p.streak||0)>=2)ev.lost[cid]=p.streak;p.streak=0}});
+      H.events=H.events||{};H.events[id]=ev;H.revealedQs.push(id)}saveH();hrender();broadcast();sfx('reveal');
     if(Object.values(H.players).some(p=>p.ans[it.q.id]&&p.ans[it.q.id].pts>0))confetti();return}
   if(H.pos<hflow.length-1){H.pos++;const n=hflow[H.pos];H.revealed=n.t==='q'&&H.revealedQs.includes(n.q.id);if(n.t==='q'&&!H.revealed)H.openedAt=Date.now();
     saveH();window.scrollTo(0,0);hrender();broadcast();if(n.t==='final'){sfx('win');confetti()}else sfx('next')}
@@ -391,6 +417,31 @@ function refreshLive(){
   const it=hflow[H.pos];
   if(it.t==='lobby'){const el=$('#lob');if(el){el.innerHTML=namesHTML('lobby');bindKick()}const n=$('#nplayers');if(n)n.textContent=Object.keys(H.players).length}
   else if(it.t==='q'&&!H.revealed){const el=$('#ansd');if(el)el.innerHTML=answeredHTML()}
+}
+function calloutsHTML(q,ps,right,answered){
+  const out=[],ev=(H.events||{})[q.id]||{lost:{}};
+  if(!right.length)out.push(`<div class="call big">NOBODY GOT IT! 💀</div>`);
+  else{out.push(`<div class="call">⚡ FASTEST: ${esc(right[0].name)} (${(right[0].ans[q.id].ms/1000).toFixed(1)} s)</div>`);
+    if(right.length===1&&answered>=3)out.push(`<div class="call big">🐺 ONLY ${esc(right[0].name.toUpperCase())} GOT IT!</div>`);
+    else if(right.length===answered&&answered>=3)out.push(`<div class="call">😎 TOO EASY: EVERYONE GOT IT</div>`)}
+  const hot=right.filter(p=>(p.ans[q.id].streak||0)>=3).sort((a,b)=>b.ans[q.id].streak-a.ans[q.id].streak);
+  if(hot.length)out.push(`<div class="call">🔥 ON FIRE: ${hot.map(p=>`${esc(p.name)} ×${p.ans[q.id].streak}`).join(', ')}</div>`);
+  const lost=Object.entries(ev.lost).filter(([cid,s])=>s>=3&&H.players[cid]).sort((a,b)=>b[1]-a[1]);
+  if(lost.length)out.push(`<div class="call">💔 STREAK OVER: ${lost.map(([cid,s])=>`${esc(H.players[cid].name)} (${s} in a row)`).join(', ')}</div>`);
+  return `<div class="calls">${out.join('')}</div>`;
+}
+function boardRows(pos,limit){
+  const now=rankAt(qidsBefore(pos)),pp=prevBoardPos(pos),before=pp>0?rankAt(qidsBefore(pp)):null;
+  const prev={};if(before)before.forEach(x=>prev[x.cid]=x);
+  return now.slice(0,limit).map(x=>({...x,prevScore:prev[x.cid]?prev[x.cid].score:0,moved:before&&prev[x.cid]?prev[x.cid].rank-x.rank:0,streak:(H.players[x.cid]||{}).streak||0}));
+}
+function kboardHTML(rows){const max=Math.max(1,...rows.map(x=>x.score));
+  return `<div class="board kb">${rows.map((x,i)=>`<div class="r ${x.rank===1?'top':''}" style="animation-delay:${i*0.12}s"><span class="n">${x.rank}.</span><div><span class="nmx">${esc(x.name)}</span>${x.streak>=3?` <span class="fire">🔥${x.streak}</span>`:''}${x.moved>0?` <span class="up">▲${x.moved}</span>`:x.moved<0?` <span class="down">▼${-x.moved}</span>`:''}<div class="bar2"><i data-to="${x.score/max*100}" style="width:${x.prevScore/max*100}%"></i></div></div><span class="s" data-from="${x.prevScore}" data-to="${x.score}">${fmt(x.prevScore)}</span></div>`).join('')}</div>`}
+function animateBoard(){
+  requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll('.kb .bar2 i[data-to]').forEach(i=>i.style.width=i.dataset.to+'%')));
+  const els=[...document.querySelectorAll('.kb .s[data-to]')],t0=performance.now(),D=1400;
+  const step=t=>{const k=Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);els.forEach(el=>{const a=+el.dataset.from,b=+el.dataset.to;el.textContent=fmt(Math.round(a+(b-a)*e))});if(k<1)requestAnimationFrame(step)};
+  requestAnimationFrame(step);
 }
 function boardHTML(rows,max){max=Math.max(1,...rows.map(x=>x.score));return `<div class="board">${rows.map(x=>`<div class="r ${x.rank===1?'top':''}"><span class="n">${x.rank}.</span><div>${esc(x.name)}<div class="bar2"><i style="width:${x.score/max*100}%"></i></div></div><span class="s">${fmt(x.score)}</span></div>`).join('')}</div>`}
 
@@ -422,21 +473,23 @@ function hrender(){
       const right=ps.filter(p=>p.ans[q.id]&&p.ans[q.id].pts>0).sort((a,b)=>a.ans[q.id].ms-b.ans[q.id].ms);
       h+=`<p class="qtext">${emo(q.q)}</p><div class="opts">${o.map((x,i)=>optHTML(x,i,{revealed:true,count:counts[i],share:counts[i]/n})).join('')}</div>
         <div class="reveal"><div class="ans"><b>ANSWER: ${'ABCD'[o.findIndex(x=>x.ok)]}</b>${emo(q.a)}</div><div class="src">${srcHTML(q.source)}</div>
-        ${right.length?`<div class="fast">FASTEST: ${esc(right[0].name)} (${(right[0].ans[q.id].ms/1000).toFixed(1)} s)</div><div class="names" style="justify-content:flex-start">${right.map(p=>`<span class="nm ok">${esc(p.name)} +${p.ans[q.id].pts}</span>`).join('')}</div>`:`<div class="fast">NOBODY GOT IT!</div>`}</div>`;
+        ${calloutsHTML(q,ps,right,counts.reduce((a,b)=>a+b,0))}
+        ${right.length?`<div class="names" style="justify-content:flex-start">${right.map(p=>{const a=p.ans[q.id];return `<span class="nm ok">${esc(p.name)} +${a.pts}${a.bonus?` <span class="fire">🔥${a.streak} +${a.bonus}</span>`:''}</span>`}).join('')}</div>`:''}</div>`;
     }
     h+=`<div class="cta" style="margin-top:20px"><button class="btn ghost" id="back">◀ BACK</button><span class="hint">${H.revealed?'SPACE = next':'SPACE = reveal'}</span><button class="btn" id="go">${H.revealed?'NEXT ▶':'REVEAL'}</button></div></div>`;
   }else if(it.t==='board'){
-    const rk=ranked();
-    h+=`<div class="win round"><span class="tag">AFTER ROUND ${it.r.id}</span><h2>LEADERBOARD</h2>${rk.length?boardHTML(rk.slice(0,10)):'<p>No players yet.</p>'}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn" id="go">NEXT ROUND ▶</button></div></div>`;
+    const rows=boardRows(H.pos,it.mini?5:10);
+    h+=`<div class="win round"><span class="tag">${it.mini?`AFTER ${it.after} QUESTIONS`:`AFTER ROUND ${it.r.id}`}</span><h2>${it.mini?'TOP 5':'LEADERBOARD'}</h2>${rows.length?kboardHTML(rows):'<p>No players yet.</p>'}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn" id="go">${it.mini?'NEXT QUESTION ▶':'NEXT ROUND ▶'}</button></div></div>`;
   }else{
     const rk=ranked(),t=[rk[1],rk[0],rk[2]],H_=[110,170,80],place=[2,1,3];
     h+=`<div class="win title"><h1>GAME OVER</h1>${rk[0]?`<div class="sub">WINNER</div><div class="code" style="font-size:clamp(22px,5vw,40px)">${esc(rk[0].name)}</div>`:''}
       <div class="podium">${t.map((x,i)=>`<div class="pod">${x?`${place[i]===1?SPR.crown:''}<div class="who">${esc(x.name)}</div><div class="pts">${fmt(x.score)}</div>`:''}<div class="blk" style="height:${H_[i]}px">${place[i]}</div></div>`).join('')}</div>
       ${rk.length>3?boardHTML(rk):''}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn ghost" id="newgame">NEW GAME</button></div></div>`;
   }
-  h+=`<div class="foot">Slack data: Oct 2025 – Oct 2026, 14 public channels. Thread stats only cover the threads we could read. Faster correct answers score more (500–1000).</div>`;
+  h+=`<div class="foot">Slack data: Oct 2025 – Oct 2026, 14 public channels. Thread stats only cover the threads we could read. Faster correct answers score more (500–1000). Streak bonus from 2 in a row: +100, +200, then +300 per answer.</div>`;
   if(DEBUG)h+=`<pre id="dlog" style="font-size:14px;white-space:pre-wrap;color:var(--dim)">${esc(DLOG.join('\n'))}</pre>`;app().innerHTML=h;
   if(it.t==='lobby')drawQR();
+  if(it.t==='board')animateBoard();
   hbind();
 }
 function drawQR(){const el=$('#qr');if(!el)return;if(window.QRCode){try{new QRCode(el,{text:joinURL(),width:220,height:220,colorDark:'#1a1033',colorLight:'#f6efd9',correctLevel:QRCode.CorrectLevel.M})}catch(e){el.remove()}}else el.remove()}
@@ -507,9 +560,9 @@ function prender(){
         ${s.my?`<p class="pts">LOCKED IN: ${'ABCD'[s.my.c]}. WAIT FOR THE REVEAL</p>`:''}</div>`;
     }else if(s.phase==='q'){
       const m=s.my;
-      h+=`<div class="win center"><span class="pstat">Q${s.qn}</span>${m?(m.ok?`<p class="big g">CORRECT!</p><p class="pts">+${m.pts}</p>`:`<p class="big b">NOPE!</p><p class="hint">You said ${'ABCD'[m.c]}. Right answer: ${'ABCD'[s.correct]}</p>`):`<p class="big b">TOO SLOW!</p><p class="hint">Right answer: ${'ABCD'[s.correct]}</p>`}
-        <p class="hint">${emo(s.labels[s.correct])}</p><p class="pts">${fmt(s.score)} PTS • #${s.rank} OF ${s.nPlayers}</p></div>`;
-    }else if(s.phase==='board')h+=`<div class="win center"><span class="pstat">AFTER ROUND ${s.roundId}</span><p class="big y">#${s.rank} OF ${s.nPlayers}</p><p class="pts">${fmt(s.score)} PTS</p></div>`;
+      h+=`<div class="win center"><span class="pstat">Q${s.qn}</span>${m?(m.ok?`<p class="big g">CORRECT!</p><p class="pts">+${m.pts}</p>${m.bonus?`<p class="pts fire">🔥 ${m.streak} IN A ROW · +${m.bonus} BONUS</p>`:''}`:`<p class="big b">NOPE!</p><p class="hint">You said ${'ABCD'[m.c]}. Right answer: ${'ABCD'[s.correct]}</p>`):`<p class="big b">TOO SLOW!</p><p class="hint">Right answer: ${'ABCD'[s.correct]}</p>`}
+        <p class="hint">${emo(s.labels[s.correct])}</p>${s.lost?`<p class="pts" style="color:var(--bad)">💔 ${s.lost}-STREAK LOST</p>`:''}<p class="pts">${fmt(s.score)} PTS • #${s.rank} OF ${s.nPlayers}</p></div>`;
+    }else if(s.phase==='board')h+=`<div class="win center"><span class="pstat">${s.roundId?`AFTER ROUND ${s.roundId}`:`AFTER ${s.after} QUESTIONS`}</span><p class="big y">#${s.rank} OF ${s.nPlayers}</p>${s.moved>0?`<p class="pts" style="color:var(--good)">▲ UP ${s.moved}</p>`:s.moved<0?`<p class="pts" style="color:var(--bad)">▼ DOWN ${-s.moved}</p>`:''}<p class="pts">${fmt(s.score)} PTS</p>${s.streak>=2?`<p class="pts fire">🔥 ${s.streak} IN A ROW</p>`:''}${s.ahead?`<p class="hint">${fmt(s.ahead.gap)} pts behind ${esc(s.ahead.name)}</p>`:s.rank===1?'<p class="hint">You are in the lead!</p>':''}</div>`;
     else if(s.phase==='final')h+=`<div class="win center">${s.rank===1?SPR.crown+'<p class="big y">WINNER!</p>':`<p class="big y">#${s.rank} OF ${s.nPlayers}</p>`}<p class="pts">${fmt(s.score)} PTS</p><p class="hint">Winner: ${esc((s.top||[])[0]||'')}</p></div>`;
   }
   h+=`<div class="pstat" id="pstat">${PL.screen==='join'?'':esc(pStatusText())}</div></div>`;
