@@ -95,6 +95,23 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px dashed var(
 @keyframes fall{to{transform:translateY(105vh) rotate(180deg)}}
 .foot{font-size:18px;color:var(--dim);text-align:center}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+/* end credits */
+.credits{position:fixed;inset:0;z-index:45;background:#0b0618;overflow:hidden;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.credits .stars{position:absolute;inset:0;background-image:radial-gradient(2px 2px at 10% 20%,#f6efd9 50%,transparent 51%),radial-gradient(2px 2px at 70% 35%,#37e3d2 50%,transparent 51%),radial-gradient(2px 2px at 40% 80%,#ffcf33 50%,transparent 51%),radial-gradient(2px 2px at 85% 70%,#ff4f9a 50%,transparent 51%),radial-gradient(2px 2px at 25% 55%,#f6efd9 50%,transparent 51%);background-size:300px 300px;animation:twinkle 2s steps(2,jump-none) infinite;opacity:.7}
+@keyframes twinkle{50%{opacity:.35}}
+.credits .roll{position:relative;max-width:760px;margin:0 auto;text-align:center;animation:roll 95s linear forwards;transform:translateY(100vh)}
+@keyframes roll{from{transform:translateY(100vh)}to{transform:translateY(-100%)}}
+.credits .ch{font-family:var(--px);font-weight:400;font-size:clamp(18px,4vw,30px);line-height:1.5;color:var(--coin);text-shadow:4px 4px 0 var(--pink);margin:0 0 12px}
+.credits .ct{font-family:var(--px);font-weight:400;font-size:12px;color:var(--cyan);letter-spacing:.1em;margin:0 0 14px}
+.credits .cs{color:var(--dim);margin:6px 0;font-size:24px}
+.credits .cl{color:var(--ink);margin:4px 0;font-size:24px}
+.credits .cr{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:6px 0;font-size:24px;text-align:left}
+.credits .cr span{text-align:right;color:var(--dim)}
+.credits .cr b{font-weight:400;color:var(--ink);overflow-wrap:anywhere}
+.credits .cg{height:72px}
+.credits .cbar{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;z-index:46}
+@media(max-width:560px){.credits .cr{grid-template-columns:1fr;gap:0;text-align:center}.credits .cr span{text-align:center}}
+@media(prefers-reduced-motion:reduce){.credits .roll{animation:none;transform:none;overflow:auto;height:100%}.credits{overflow:auto}}
 
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .lobby{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;width:100%;text-align:left}
@@ -215,6 +232,30 @@ function timerHTML(on,elapsedMs,stopped){return `<div class="timer ${on?'':'off'
 function optHTML(o,i,opts){opts=opts||{};const cls=opts.revealed?(o.ok?'right':'wrong'):'';const full=o.t.trim(),l=label(full);
   return `<div class="opt ${cls}" style="--c:${OCOL[i]}"><span class="k">${'ABCD'[i]}</span><span class="t">${opts.revealed?emo(full):emo(l)}</span>${opts.count!=null?`<span class="cnt">×${opts.count}</span><span class="dist" style="width:${opts.share*100}%"></span>`:''}</div>`}
 
+/* ---- end credits ---- */
+const CREDITS=[
+ ['h','STRUCTURE CAPITAL QUIZ'],['s','A GoClimate team production'],['gap'],
+ ['r','DIRECTED BY','Emil'],['r','QUESTIONS · DATA · LEVEL DESIGN','Claude (AI)'],['r','MUSIC & SOUND','Claude, in 62 square-wave notes'],['r','STARRING','Andrea · Carl · Cissi · Desirée · Don · Emil · Johanna · José · Kalle · Leo · Mathias · Monisha · Pia · Tove'],['gap'],
+ ['t','KNOWLEDGE BASE INGESTED'],
+ ['r','Slack channels crawled','14'],['r','Time window','365 days'],['r','Messages analyzed','4 483'],['r','Characters read','709 272'],['r','Emoji reactions mapped to reactors','5 351'],['r','Distinct reaction emoji','136'],['r','Threads reconstructed','712'],['r','Links indexed','234'],['r','Notion pages fetched','13'],['r','Drive decks read','3'],['r','Miro boards scanned','298'],['r','Raw API payload ingested','6.8 MB'],['gap'],
+ ['t','COMPUTE'],
+ ['r','Tool calls (round trips)','3 482'],['r','Reaction lookups','1 462'],['r','Thread reads','1 376'],['r','Parallel AI agents spawned','12'],['r','Inference passes','610'],['r','Tokens processed','136 292 887'],['r','Tokens generated','267 477'],['r','Independent fact-check passes','1'],['r','Reactor spot checks matched','149 / 149'],['gap'],
+ ['t','ALGORITHMS'],
+ ['l','Median first-reply latency, n ≥ 5'],['l','Lift scoring for signature emoji'],['l','Skin-tone normalization  ::skin-tone-N → base'],['l','Strict A-B-A-B run detection'],['l','Adjacent-switch ping-pong counting'],['l','Whole-word tech vocabulary matching'],['l','Set difference for the obscure reactioner'],['l','FNV-1a hash → Mulberry32 → seeded Fisher-Yates shuffle'],['l','Greedy category interleaving'],['l','Score = 1000 − 500·t/T  +  streak bonus'],['gap'],
+ ['t','ENGINEERING'],
+ ['r','Hand-written code','860 lines'],['r','Shipped as','1 HTML file · 0 servers'],['r','Realtime transport','MQTT over WebSocket · QoS 1'],['r','Presence','retained topic + last will'],['r','Fallback','WebRTC P2P · ICE / STUN / TURN'],['r','Questions · options · source links','48 · 192 · 24'],['r','Full games simulated in headless Chromium','15+'],['r','Screenshots reviewed by AI vision','18'],['gap'],
+ ['t','GRAPHICS & SOUND'],
+ ['r','Hand-placed sprites','4'],['r','Sprite pixels','234'],['r','Scanlines','1 px every 3 px'],['r','Typefaces','Press Start 2P · VT323'],['r','Synth voices','square · triangle · noise'],['r','Audio files used','0'],['gap'],
+ ['s','No Slack DMs were read in the making of this quiz.'],['s','No passwords were memorized.'],['s','Every answer has a source. Kalle still got the most reactions.'],['gap'],
+ ['h','THANK YOU FOR PLAYING'],['s','INSERT COIN TO CONTINUE']
+];
+function creditsHTML(){return `<div class="credits" id="credits" aria-label="End credits"><div class="stars"></div><div class="roll">${CREDITS.map(c=>{
+  if(c[0]==='h')return `<h2 class="ch">${esc(c[1])}</h2>`;if(c[0]==='s')return `<p class="cs">${esc(c[1])}</p>`;if(c[0]==='t')return `<h3 class="ct">${esc(c[1])}</h3>`;
+  if(c[0]==='l')return `<p class="cl">${esc(c[1])}</p>`;if(c[0]==='r')return `<div class="cr"><span>${esc(c[1])}</span><b>${esc(c[2])}</b></div>`;return '<div class="cg"></div>'}).join('')}</div>
+  <div class="cbar"><button class="chip" id="cback">◀ BACK</button><button class="chip" id="cfast">FAST ▶▶</button></div></div>`}
+function bindCredits(onBack){const b=document.getElementById('cback');if(b)b.onclick=onBack;const f=document.getElementById('cfast'),r=document.querySelector('.credits .roll');
+  if(f&&r)f.onclick=()=>{const fast=f.getAttribute('aria-pressed')==='true';f.setAttribute('aria-pressed',String(!fast));r.getAnimations().forEach(a=>a.playbackRate=fast?1:4)}}
+
 const PFX='structure-capital-quiz-v1-';
 const P=new URLSearchParams(location.search);
 const LOCAL=P.has('local');const P2P=P.has('p2p');
@@ -318,7 +359,7 @@ const EVERY=5;let qc=0;
 QUIZ.rounds.forEach((r,ri)=>{hflow.push({t:'round',r});const rq=QS.filter(q=>q.round===r.id);
   rq.forEach((q,qi)=>{hflow.push({t:'q',q});qc++;if(qc%EVERY===0&&qi<rq.length-1)hflow.push({t:'board',mini:true,after:qc})});
   if(ri<QUIZ.rounds.length-1)hflow.push({t:'board',r,after:qc})});
-hflow.push({t:'final'});
+hflow.push({t:'final'},{t:'credits'});
 const CODE_CH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode=()=>Array.from({length:4},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
 const saveH=()=>LS.set(HK,H);
@@ -378,9 +419,9 @@ function sendState(cid){
     m.my=a?{c:a.c}:null;
     if(H.revealed){m.correct=o.findIndex(x=>x.ok);if(a)m.my={c:a.c,pts:a.pts,ok:a.pts>0,bonus:a.bonus||0,streak:a.streak||0};
       const ev=(H.events||{})[q.id];if(ev&&ev.lost[cid])m.lost=ev.lost[cid]}}
-  if(it.t==='board'||it.t==='final'){const i=rk.findIndex(x=>x.cid===cid);if(i>0){const up=rk.slice(0,i).reverse().find(x=>x.score>me.score);if(up)m.ahead={name:up.name,gap:up.score-me.score}}
+  if(it.t==='board'||it.t==='final'||it.t==='credits'){const i=rk.findIndex(x=>x.cid===cid);if(i>0){const up=rk.slice(0,i).reverse().find(x=>x.score>me.score);if(up)m.ahead={name:up.name,gap:up.score-me.score}}
     m.after=it.after;m.streak=p.streak||0;const prev=rankAt(qidsBefore(prevBoardPos(H.pos))).find(x=>x.cid===cid);if(prev&&prevBoardPos(H.pos)>0)m.moved=prev.rank-me.rank}
-  if(it.t==='final')m.top=rk.slice(0,3).map(x=>x.name);
+  if(it.t==='final'||it.t==='credits')m.top=rk.slice(0,3).map(x=>x.name);
   c.send(m);
 }
 const broadcast=()=>Object.keys(conns).forEach(sendState);
@@ -448,6 +489,7 @@ function boardHTML(rows,max){max=Math.max(1,...rows.map(x=>x.score));return `<di
 function hrender(){
   const it=hflow[H.pos];
   music.set(it.t==='q'?(H.revealed?null:'think'):'theme');
+  if(it.t==='credits'){app().innerHTML=creditsHTML();bindCredits(hBack);return}
   const q=curQ();
   let h=`<div class="bar"><span class="logo">STRUCTURE CAPITAL QUIZ</span><span class="meta">${it.t!=='lobby'?`<span>JOIN: <span style="color:var(--coin)">${H.code}</span></span>`:''}${q?`<span>Q ${q.n}/${QS.length}</span>`:''}${statusHTML()}<button class="chip" id="bT" aria-pressed="${H.timer}">TIMER</button><button class="chip" id="bM" aria-pressed="${H.music}">MUSIC</button><button class="chip" id="bS" aria-pressed="${H.sfx}">SFX</button></span></div>`;
   if(it.t==='lobby'){
@@ -484,7 +526,7 @@ function hrender(){
     const rk=ranked(),t=[rk[1],rk[0],rk[2]],H_=[110,170,80],place=[2,1,3];
     h+=`<div class="win title"><h1>GAME OVER</h1>${rk[0]?`<div class="sub">WINNER</div><div class="code" style="font-size:clamp(22px,5vw,40px)">${esc(rk[0].name)}</div>`:''}
       <div class="podium">${t.map((x,i)=>`<div class="pod">${x?`${place[i]===1?SPR.crown:''}<div class="who">${esc(x.name)}</div><div class="pts">${fmt(x.score)}</div>`:''}<div class="blk" style="height:${H_[i]}px">${place[i]}</div></div>`).join('')}</div>
-      ${rk.length>3?boardHTML(rk):''}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn ghost" id="newgame">NEW GAME</button></div></div>`;
+      ${rk.length>3?boardHTML(rk):''}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn ghost" id="newgame">NEW GAME</button><button class="btn" id="go">ROLL CREDITS ▶</button></div></div>`;
   }
   h+=`<div class="foot">Slack data: Oct 2025 – Oct 2026, 14 public channels. Thread stats only cover the threads we could read. Faster correct answers score more (500–1000). Streak bonus from 2 in a row: +100, +200, then +300 per answer.</div>`;
   if(DEBUG)h+=`<pre id="dlog" style="font-size:14px;white-space:pre-wrap;color:var(--dim)">${esc(DLOG.join('\n'))}</pre>`;app().innerHTML=h;
@@ -563,6 +605,7 @@ function prender(){
       h+=`<div class="win center"><span class="pstat">Q${s.qn}</span>${m?(m.ok?`<p class="big g">CORRECT!</p><p class="pts">+${m.pts}</p>${m.bonus?`<p class="pts fire">🔥 ${m.streak} IN A ROW · +${m.bonus} BONUS</p>`:''}`:`<p class="big b">NOPE!</p><p class="hint">You said ${'ABCD'[m.c]}. Right answer: ${'ABCD'[s.correct]}</p>`):`<p class="big b">TOO SLOW!</p><p class="hint">Right answer: ${'ABCD'[s.correct]}</p>`}
         <p class="hint">${emo(s.labels[s.correct])}</p>${s.lost?`<p class="pts" style="color:var(--bad)">💔 ${s.lost}-STREAK LOST</p>`:''}<p class="pts">${fmt(s.score)} PTS • #${s.rank} OF ${s.nPlayers}</p></div>`;
     }else if(s.phase==='board')h+=`<div class="win center"><span class="pstat">${s.roundId?`AFTER WORLD ${s.roundId}`:`AFTER ${s.after} QUESTIONS`}</span><p class="big y">#${s.rank} OF ${s.nPlayers}</p>${s.moved>0?`<p class="pts" style="color:var(--good)">▲ UP ${s.moved}</p>`:s.moved<0?`<p class="pts" style="color:var(--bad)">▼ DOWN ${-s.moved}</p>`:''}<p class="pts">${fmt(s.score)} PTS</p>${s.streak>=2?`<p class="pts fire">🔥 ${s.streak} IN A ROW</p>`:''}${s.ahead?`<p class="hint">${fmt(s.ahead.gap)} pts behind ${esc(s.ahead.name)}</p>`:s.rank===1?'<p class="hint">You are in the lead!</p>':''}</div>`;
+    else if(s.phase==='credits')h+=`<div class="win center"><p class="big y">ROLL CREDITS</p><p class="hint">Look at the big screen. You finished #${s.rank} of ${s.nPlayers} with ${fmt(s.score)} pts.</p></div>`;
     else if(s.phase==='final')h+=`<div class="win center">${s.rank===1?SPR.crown+'<p class="big y">WINNER!</p>':`<p class="big y">#${s.rank} OF ${s.nPlayers}</p>`}<p class="pts">${fmt(s.score)} PTS</p><p class="hint">Winner: ${esc((s.top||[])[0]||'')}</p></div>`;
   }
   h+=`<div class="pstat" id="pstat">${PL.screen==='join'?'':esc(pStatusText())}</div></div>`;
