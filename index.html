@@ -209,6 +209,8 @@ const LOCAL=P.has('local');
 const T_MS=20000;
 const app=()=>document.getElementById('app');
 const $=s=>document.querySelector(s);
+const DEBUG=P.has('debug');const DLOG=[];
+function dlog(...a){const s=new Date().toLocaleTimeString('sv-SE')+' '+a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ');DLOG.push(s);if(DLOG.length>40)DLOG.shift();console.log('[scq]',s);const el=document.getElementById('dlog');if(el)el.textContent=DLOG.join('\n')}
 const rid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 
 /* ---------------- transport: PeerJS (real) or BroadcastChannel (?local, same-browser testing) ---------------- */
@@ -224,11 +226,11 @@ const Transport={
     if(!window.Peer){cb.onStatus('PeerJS did not load. Check the internet connection.');return}
     let peer;
     const start=()=>{peer=new Peer(PFX+code,{debug:0});
-      peer.on('open',()=>cb.onStatus('online'));
-      peer.on('connection',dc=>{const c=mkConn(d=>{try{dc.send(d)}catch(e){}},()=>{try{dc.close()}catch(e){}});
-        dc.on('data',d=>c.emit('data',d));dc.on('close',()=>c.emit('close'));dc.on('error',()=>c.emit('close'));dc.on('open',()=>cb.onConn(c))});
+      peer.on('open',id=>{dlog('host peer open',id);cb.onStatus('online')});
+      peer.on('connection',dc=>{dlog('incoming connection',dc.peer);const c=mkConn(d=>{try{dc.send(d)}catch(e){}},()=>{try{dc.close()}catch(e){}});
+        dc.on('data',d=>c.emit('data',d));dc.on('close',()=>c.emit('close'));dc.on('error',()=>c.emit('close'));dc.on('open',()=>{dlog('connection open',dc.peer);cb.onConn(c)});dc.on('error',e=>dlog('conn error',String(e&&e.type||e)))});
       peer.on('disconnected',()=>{cb.onStatus('reconnecting');setTimeout(()=>{try{if(!peer.destroyed)peer.reconnect()}catch(e){}},1500)});
-      peer.on('error',e=>{if(e.type==='unavailable-id'){cb.onStatus('code busy, retrying');try{peer.destroy()}catch(_){};setTimeout(start,4000)}
+      peer.on('error',e=>{dlog('host peer error',e.type,String(e.message||''));if(e.type==='unavailable-id'){cb.onStatus('code busy, retrying');try{peer.destroy()}catch(_){};setTimeout(start,4000)}
         else if(e.type==='peer-unavailable'){}else cb.onStatus('problem: '+e.type)})};
     start();
   },
@@ -241,19 +243,19 @@ const Transport={
       cb.onStatus('connecting');hello();setInterval(hello,1500);
       addEventListener('pagehide',()=>bc.postMessage({to:'host',from:id,type:'close'}));return}
     if(!window.Peer){cb.onStatus('PeerJS did not load. Check the internet connection.');return}
-    const peer=new Peer({debug:0});let attempt=0,retryT=null;
+    const peer=new Peer({debug:DEBUG?2:0});let attempt=0,retryT=null;dlog('player peer created');
     const retry=ms=>{clearTimeout(retryT);retryT=setTimeout(connect,ms)};
     const connect=()=>{if(peer.destroyed)return;if(peer.disconnected){try{peer.reconnect()}catch(e){}return retry(2500)}
-      const my=++attempt;cb.onStatus('connecting');
+      const my=++attempt;cb.onStatus('connecting');dlog('connecting to host',PFX+code,'attempt',my);
       const dc=peer.connect(PFX+code,{reliable:true});let opened=false;
       const c=mkConn(d=>{try{dc.send(d)}catch(e){}});
-      dc.on('open',()=>{if(my!==attempt)return;opened=true;cb.onStatus('online');cb.onOpen(c)});
+      dc.on('open',()=>{dlog('data channel open');if(my!==attempt)return;opened=true;cb.onStatus('online');cb.onOpen(c)});
       dc.on('data',d=>{if(my===attempt)c.emit('data',d)});
-      const lost=()=>{if(my!==attempt)return;attempt++;cb.onStatus('lost');retry(2000)};
+      const lost=e=>{dlog('channel closed/error',String(e&&e.type||e||''));if(my!==attempt)return;attempt++;cb.onStatus('lost');retry(2000)};
       dc.on('close',lost);dc.on('error',lost);
-      setTimeout(()=>{if(!opened&&my===attempt){attempt++;try{dc.close()}catch(e){}retry(500)}},9000)};
-    peer.on('open',connect);
-    peer.on('error',e=>{if(e.type==='peer-unavailable'){attempt++;cb.onStatus('nohost');retry(3000)}
+      setTimeout(()=>{if(!opened&&my===attempt){dlog('no connection after 9s, retrying (ice:',dc.peerConnection&&dc.peerConnection.iceConnectionState,')');attempt++;try{dc.close()}catch(e){}retry(500)}},9000)};
+    peer.on('open',id=>{dlog('player peer open',id);connect()});
+    peer.on('error',e=>{dlog('player peer error',e.type,String(e.message||''));if(e.type==='peer-unavailable'){attempt++;cb.onStatus('nohost');retry(3000)}
       else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){cb.onStatus('network');retry(4000)}
       else cb.onStatus('problem: '+e.type)});
     peer.on('disconnected',()=>setTimeout(()=>{try{if(!peer.destroyed)peer.reconnect()}catch(e){}},1500));
@@ -397,7 +399,7 @@ function hrender(){
       ${rk.length>3?boardHTML(rk):''}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn ghost" id="newgame">NEW GAME</button></div></div>`;
   }
   h+=`<div class="foot">Slack data: Oct 2025 – Oct 2026, 14 public channels. Thread stats only cover the threads we could read. Faster correct answers score more (500–1000).</div>`;
-  app().innerHTML=h;
+  if(DEBUG)h+=`<pre id="dlog" style="font-size:14px;white-space:pre-wrap;color:var(--dim)">${esc(DLOG.join('\n'))}</pre>`;app().innerHTML=h;
   if(it.t==='lobby')drawQR();
   hbind();
 }
@@ -427,7 +429,8 @@ function pStart(){
   PL.cid=LS.get('scq-cid-'+PL.code,null)||rid();LS.set('scq-cid-'+PL.code,PL.cid);
   LS.set('scq-name',PL.name);LS.set('scq-room',PL.code);
   PL.screen='wait';prender();
-  Transport.join(PL.code,{onStatus:s=>{PL.status=s;const el=$('#pstat');if(el)el.textContent=pStatusText();else if(PL.screen==='wait')prender()},
+  PL.waitStart=Date.now();setInterval(()=>{if(PL.screen==='wait')prender()},3000);
+  Transport.join(PL.code,{onStatus:s=>{PL.status=s;if(PL.screen==='wait')prender();else{const el=$('#pstat');if(el)el.textContent=pStatusText()}},
     onOpen:c=>{PL.conn=c;c.on('data',pMsg);c.send({t:'hello',cid:PL.cid,name:PL.name})}});
 }
 function pStatusText(){return {online:'● CONNECTED',connecting:'CONNECTING…',lost:'CONNECTION LOST, RECONNECTING…',nohost:'GAME NOT FOUND. CHECK THE CODE. RETRYING…',network:'NETWORK PROBLEM, RETRYING…'}[PL.status]||String(PL.status||'').toUpperCase()}
@@ -436,7 +439,7 @@ function pMsg(m){
   if(!m||typeof m!=='object')return;
   if(m.t==='kicked'){PL.screen='kicked';LS.set('scq-cid-'+PL.code,null);prender();return}
   if(m.t==='ended'){PL.screen='ended';prender();return}
-  if(m.t!=='state')return;
+  if(m.t!=='state')return;if(!PL.state)dlog('first state received',m.phase);
   const key=m.phase+'|'+(m.qid||m.roundId||'')+'|'+(m.revealed?1:0);
   const changed=key!==lastPhaseKey;lastPhaseKey=key;
   PL.state=m;PL.name=m.name;PL.screen='game';
@@ -454,7 +457,8 @@ function prender(){
       <div class="err" id="jerr">${esc(PL.err)}</div><button class="btn" type="submit">▶ JOIN</button></form>
       ${P.get('room')?'':'<button class="chip" id="hostbtn" style="margin-top:8px">I AM THE HOST</button>'}</div>`;
   }else if(PL.screen==='wait'){
-    h+=`<div class="win center"><div>${SPR.coin}</div><p class="big y">JOINING…</p><p class="hint">${esc(pStatusText())}</p></div>`;
+    const secs=Math.round((Date.now()-(PL.waitStart||Date.now()))/1000);
+    h+=`<div class="win center"><div>${SPR.coin}</div><p class="big y">JOINING ${esc(PL.code)}…</p><p class="pts">${esc(pStatusText()||'STARTING…')}</p>${secs>12?`<p class="hint">Still trying (${secs} s). Check that the big screen shows <b>LIVE</b> and the code <b>${esc(PL.code)}</b>. On office Wi-Fi? Try mobile data.</p>`:''}</div>`;
   }else if(PL.screen==='kicked'||PL.screen==='ended'){
     h+=`<div class="win center"><p class="big b">${PL.screen==='kicked'?'REMOVED':'GAME ENDED'}</p><p class="hint">${PL.screen==='kicked'?'The host removed this name. Pick another one.':'The host started a new game. Join again with the new code.'}</p><button class="btn" id="rejoin">JOIN AGAIN</button></div>`;
   }else{
@@ -473,7 +477,7 @@ function prender(){
     else if(s.phase==='final')h+=`<div class="win center">${s.rank===1?SPR.crown+'<p class="big y">WINNER!</p>':`<p class="big y">#${s.rank} OF ${s.nPlayers}</p>`}<p class="pts">${fmt(s.score)} PTS</p><p class="hint">Winner: ${esc((s.top||[])[0]||'')}</p></div>`;
   }
   h+=`<div class="pstat" id="pstat">${PL.screen==='join'?'':esc(pStatusText())}</div></div>`;
-  app().innerHTML=h;pbind();
+  if(DEBUG)h+=`<pre id="dlog" style="font-size:14px;white-space:pre-wrap;color:var(--dim)">${esc(DLOG.join('\n'))}</pre>`;app().innerHTML=h;pbind();
 }
 function pbind(){
   const f=$('#jf');if(f)f.onsubmit=e=>{e.preventDefault();const code=(($('#code')&&$('#code').value)||PL.code).toUpperCase().replace(/[^A-Z0-9]/g,'');const name=cleanName($('#name').value);
