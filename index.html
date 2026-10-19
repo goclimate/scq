@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Structure Capital Quiz Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* Layout: one arcade cabinet screen. Header strip, big question window, 2x2 answer grid. Single committed dark look by choice. */
+:root{
+  --bg:#1a1033; --panel:#2b1b57; --panel2:#3a2575; --ink:#f6efd9; --dim:#a99bd6;
+  --coin:#ffcf33; --pink:#ff4f9a; --cyan:#37e3d2; --good:#5fe38a; --bad:#ff5a4d;
+  --oa:#ff4f9a; --ob:#37e3d2; --oc:#ffcf33; --od:#5fe38a;
+  --px:'Press Start 2P','Courier New',monospace; --body:'VT323','Courier New',monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:24px;line-height:1.15;
+  padding-block:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:16px 16px}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(transparent 0 2px,rgba(0,0,0,.16) 2px 3px);z-index:50}
+#app{max-width:1000px;margin:0 auto;padding-block:16px 40px;display:flex;flex-direction:column;gap:16px;min-height:100%}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px dashed var(--coin);outline-offset:3px}
+.bar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-family:var(--px);font-size:10px;letter-spacing:.05em}
+.bar .logo{color:var(--coin)}
+.bar .meta{color:var(--dim);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.chip{font-family:var(--px);font-size:10px;background:var(--panel);border:0;padding:8px 10px;box-shadow:0 0 0 2px var(--dim)}
+.chip[aria-pressed="true"]{background:var(--coin);color:#1a1033;box-shadow:0 0 0 2px var(--coin)}
+.win{background:var(--panel);padding:24px;box-shadow:0 0 0 4px var(--ink),0 0 0 8px var(--bg),0 0 0 12px var(--pink);position:relative;margin:12px}
+.win h1,.win h2{font-family:var(--px);font-weight:400;text-wrap:balance;margin:0}
+.title{display:flex;flex-direction:column;align-items:center;text-align:center;gap:20px;padding-block:36px}
+.title h1{font-size:clamp(20px,5.4vw,44px);line-height:1.35;color:var(--coin);text-shadow:4px 4px 0 var(--pink)}
+.title .sub{font-family:var(--px);font-size:11px;color:var(--cyan);line-height:1.8}
+.title p{max-width:48ch;color:var(--dim);margin:0}
+.title p b{color:var(--ink);font-weight:400}
+.blink{animation:blink 1s steps(2,jump-none) infinite}
+@keyframes blink{50%{opacity:0}}
+.sprite{image-rendering:pixelated;shape-rendering:crispEdges}
+.bob{animation:bob .8s steps(2,jump-none) infinite}
+@keyframes bob{50%{transform:translateY(-8px)}}
+.spin{animation:spin 1s steps(4) infinite}
+@keyframes spin{0%{transform:scaleX(1)}25%{transform:scaleX(.5)}50%{transform:scaleX(.1)}75%{transform:scaleX(.5)}100%{transform:scaleX(1)}}
+.row{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;align-items:flex-end}
+.round{text-align:center;display:flex;flex-direction:column;gap:18px;align-items:center;padding-block:30px}
+.round .tag{font-family:var(--px);font-size:11px;color:var(--cyan)}
+.round h2{font-size:clamp(18px,4.4vw,32px);line-height:1.4;color:var(--pink)}
+.round p{margin:0;color:var(--dim);max-width:44ch}
+.qhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-family:var(--px);font-size:10px;color:var(--cyan);margin-bottom:16px}
+.qnum{font-family:var(--px);font-size:18px;color:var(--bg);background:var(--coin);padding:8px 12px}
+.qtext{font-size:clamp(26px,4.2vw,38px);line-height:1.12;text-wrap:balance;margin:0 0 20px;min-width:0;overflow-wrap:anywhere}
+.timer{height:12px;background:var(--bg);box-shadow:0 0 0 2px var(--dim);margin-bottom:20px}
+.timer i{display:block;height:100%;background:var(--good);width:100%;transform-origin:left;animation:drain 20s steps(20,end) forwards}
+.timer.stop i{animation-play-state:paused}
+.timer.off{visibility:hidden}
+@keyframes drain{0%{transform:scaleX(1);background:var(--good)}60%{background:var(--coin)}85%,100%{background:var(--bad)}100%{transform:scaleX(0)}}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:640px){.opts{grid-template-columns:1fr}body{font-size:22px}.win{padding:16px;margin:10px}}
+.opt{display:flex;gap:12px;align-items:flex-start;text-align:left;background:var(--panel2);border:0;padding:14px;min-width:0;position:relative;box-shadow:inset -4px -4px 0 rgba(0,0,0,.35),inset 4px 4px 0 rgba(255,255,255,.12)}
+.opt .k{font-family:var(--px);font-size:12px;color:#1a1033;background:var(--c,var(--coin));flex:none;padding:6px 7px}
+.opt .t{min-width:0;overflow-wrap:anywhere;flex:1}
+.opt .d{display:block;color:var(--dim);font-size:20px}
+.opt .cnt{font-family:var(--px);font-size:11px;color:var(--ink);flex:none;align-self:center}
+.opt .dist{position:absolute;left:0;bottom:0;height:5px;background:var(--c,var(--coin))}
+.opt.right{background:#1f6b3c;animation:flash .5s steps(2,jump-none) 4}
+.opt.wrong{opacity:.45}
+@keyframes flash{50%{background:#37b866}}
+.reveal{margin-top:20px;display:grid;gap:12px}
+.ans{background:var(--bg);padding:14px;box-shadow:0 0 0 2px var(--good)}
+.ans b{font-family:var(--px);font-size:11px;color:var(--good);font-weight:400;display:block;margin-bottom:8px}
+.src{font-size:21px;color:var(--dim);overflow-wrap:anywhere}
+.src a{color:var(--cyan)}
+.lab{font-family:var(--px);font-size:9px;color:var(--pink);margin-right:8px}
+.cta{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.btn{font-family:var(--px);font-size:12px;background:var(--coin);color:#1a1033;border:0;padding:14px 18px;box-shadow:inset -4px -4px 0 rgba(0,0,0,.25),0 4px 0 #a07a00}
+.btn:active{transform:translateY(3px);box-shadow:inset -4px -4px 0 rgba(0,0,0,.25),0 1px 0 #a07a00}
+.btn.ghost{background:var(--panel2);color:var(--ink);box-shadow:inset -4px -4px 0 rgba(0,0,0,.3),0 4px 0 #120a26}
+.btn.danger{background:var(--bad);color:#1a1033}
+.hint{font-size:20px;color:var(--dim)}
+.board{display:grid;gap:8px;margin-top:12px;width:100%;text-align:left}
+.board .r{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center;background:var(--bg);padding:8px 12px}
+.board .r.top{box-shadow:0 0 0 2px var(--coin)}
+.board .n{font-family:var(--px);font-size:11px;color:var(--dim)}
+.board .s{font-family:var(--px);font-size:12px;color:var(--coin);font-variant-numeric:tabular-nums}
+.board .bar2{height:8px;background:var(--panel2);margin-top:4px}.board .bar2 i{display:block;height:100%;background:var(--pink)}
+.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:40}
+.confetti i{position:absolute;width:10px;height:10px;top:-12px;animation:fall 1.6s steps(14,end) forwards}
+@keyframes fall{to{transform:translateY(105vh) rotate(180deg)}}
+.foot{font-size:18px;color:var(--dim);text-align:center}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.lobby{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;width:100%;text-align:left}
+@media(max-width:700px){.lobby{grid-template-columns:1fr;justify-items:center;text-align:center}}
+#qr{background:var(--ink);padding:12px;line-height:0}
+#qr img,#qr canvas{display:block;width:220px;height:220px;image-rendering:pixelated}
+.steps{display:grid;gap:10px;min-width:0}
+.steps .s{color:var(--dim)}
+.steps .url{color:var(--cyan);overflow-wrap:anywhere}
+.code{font-family:var(--px);font-size:clamp(28px,6vw,52px);color:var(--coin);letter-spacing:.12em;text-shadow:4px 4px 0 var(--pink)}
+.names{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%;min-height:44px}
+.nm{background:var(--panel2);border:0;padding:6px 12px;font-size:24px;box-shadow:0 0 0 2px var(--dim);animation:pop .35s steps(3,end)}
+.nm.off{opacity:.45}
+.nm.kick{background:var(--bad);color:#1a1033;box-shadow:0 0 0 2px var(--bad)}
+.nm.ok{background:var(--good);color:#12301d;box-shadow:0 0 0 2px var(--good)}
+@keyframes pop{0%{transform:scale(.4)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+.status{font-family:var(--px);font-size:9px;display:inline-flex;align-items:center;gap:6px}
+.status i{width:10px;height:10px;display:inline-block;background:var(--bad)}
+.status.on i{background:var(--good)}
+.answered{margin-top:18px;display:grid;gap:10px}
+.allin{font-family:var(--px);font-size:12px;color:var(--good)}
+.fast{font-family:var(--px);font-size:11px;color:var(--coin);line-height:1.8}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end;width:100%;max-width:640px}
+.pod{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.pod .who{font-size:26px;overflow-wrap:anywhere;text-align:center}
+.pod .blk{width:100%;background:var(--panel2);display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font-family:var(--px);font-size:16px;color:var(--coin);box-shadow:inset -4px -4px 0 rgba(0,0,0,.3),inset 4px 4px 0 rgba(255,255,255,.12)}
+.pod .pts{font-family:var(--px);font-size:10px;color:var(--dim)}
+/* phone */
+.phone{max-width:520px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:14px}
+.field{display:grid;gap:6px}
+.field label{font-family:var(--px);font-size:10px;color:var(--cyan)}
+.field input{background:var(--bg);border:0;box-shadow:0 0 0 2px var(--dim);padding:12px;font-size:28px;width:100%;text-transform:none}
+.field input#code{text-transform:uppercase;letter-spacing:.2em;font-family:var(--px);font-size:20px}
+.err{color:var(--bad);min-height:1.2em}
+.pbtns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pb{border:0;min-height:110px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:6px;background:var(--c);color:#1a1033;box-shadow:inset -5px -5px 0 rgba(0,0,0,.25),0 5px 0 rgba(0,0,0,.4);font-size:22px;line-height:1.05;min-width:0;overflow-wrap:anywhere}
+.pb .k{font-family:var(--px);font-size:16px}
+.pb:active{transform:translateY(3px)}
+.pb.dim{opacity:.3}
+.pb.mine{opacity:1;outline:4px solid var(--ink);outline-offset:3px}
+.pq{font-size:24px;color:var(--ink);margin:0}
+.big{font-family:var(--px);font-size:clamp(22px,7vw,34px);line-height:1.4;text-align:center;margin:0}
+.big.g{color:var(--good)}.big.b{color:var(--bad)}.big.y{color:var(--coin)}
+.pts{font-family:var(--px);font-size:14px;color:var(--coin);text-align:center}
+.center{text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.pstat{font-family:var(--px);font-size:9px;color:var(--dim);text-align:center}
+@media(prefers-reduced-motion:reduce){.timer{display:none}}
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite"></div>
+<div class="confetti" id="conf" aria-hidden="true"></div>
+<script>
+const QUIZ={"rounds": [{"id": 1, "name": "Reaction Rumble"}, {"id": 2, "name": "Thread Life"}, {"id": 3, "name": "Smileys & Tech Talk"}, {"id": 4, "name": "Who Said It?"}, {"id": 5, "name": "Company, Tools & Tidbits"}], "questions": [{"id": "R1-01", "round": 1, "q": "Which reaction is used most in our main Slack channels (last 12 months)?", "a": ":+1: (628 uses)", "wrong": [":tada: (539)", ":heart: (402)", ":green_heart: (378)"], "source": "METHOD: All emoji reactions from the team in the 14 channels, skin tones merged. 👍 628, 🎉 539, ❤️ 402, 💚 378."}, {"id": "R1-02", "round": 1, "q": "Whose signature reaction is :sunny:?", "a": "Mathias (122 of the 287 :sunny: reactions)", "wrong": ["Cissi (29)", "Desirée (21)", "Carl (17)"], "source": "METHOD: Every :sunny: reaction, counted by who gave it."}, {"id": "R1-03", "round": 1, "q": "Who hands out the most :heart: reactions?", "a": "Andrea (94)", "wrong": ["Tove (46)", "Monisha (42)", "Cissi (40)"], "source": "METHOD: Every :heart: reaction, counted by who gave it."}, {"id": "R1-04", "round": 1, "q": "Who is our :eyes: reactor?", "a": "Johanna (30 of 93)", "wrong": ["Tove (14)", "Carl (12)", "Monisha (8)"], "source": "METHOD: Every :eyes: reaction, counted by who gave it."}, {"id": "R1-05", "round": 1, "q": "Who hands out the most :tada:?", "a": "Tove (59)", "wrong": ["Monisha (50)", "Cissi (50)", "Carl (47)"], "source": "METHOD: Every :tada: reaction, counted by who gave it."}, {"id": "R1-06", "round": 1, "q": "Whose go-to is :star2:?", "a": "Carl (50)", "wrong": ["Tove (36)", "Desirée (34)", "Cissi (32)"], "source": "METHOD: Every :star2: reaction, counted by who gave it."}, {"id": "R1-07", "round": 1, "q": "Which two people are the only ones who ever use skin-tone variants on their reactions?", "a": "Tove (59) and José (39)", "wrong": ["Andrea and Cissi", "Don and Monisha", "Emil and Pia"], "source": "METHOD: Reactions with a skin-tone variant. Nobody else on the team has a single one."}, {"id": "R1-08", "round": 1, "q": "Most obscure reactioner: who has used the most emoji that nobody else used in the data we looked at?", "a": "Monisha (6, for example :heavy_check_mark: x4, :shaking_face:, :people_hugging:)", "wrong": ["Don (4)", "Andrea (3)", "Emil (3)"], "source": "METHOD: Emoji that only one person on the team has ever reacted with, counted per person."}, {"id": "R1-11", "round": 1, "q": "Who has received the most reactions on their messages?", "a": "Kalle (1,446, about 2.35 per message)", "wrong": ["Cissi (617)", "Andrea (544)", "Mathias (488)"], "source": "METHOD: All team reactions on each person's messages. Most of Kalle's come from #wins posts."}, {"id": "R1-12", "round": 1, "q": "Which two are the silent cheerleaders, giving many more reactions than they receive?", "a": "José (235 given, 21 received) and Monisha (510 given, 75 received)", "wrong": ["Kalle and Leo", "Andrea and Don", "Emil and Pia"], "source": "METHOD: Reactions received divided by reactions given. José 0.09 and Monisha 0.15; next is Desirée at 0.43."}, {"id": "R1-02x", "round": 1, "q": "Who reacts with the custom :thank_you: emoji most?", "a": "Andrea (17 of 29)", "wrong": ["Monisha (3)", "Kalle (2)", "Cissi (2)"], "source": "METHOD: Every :thank_you: reaction, counted by who gave it."}, {"id": "R1-03x", "round": 1, "q": "Who gives the most :white_check_mark:?", "a": "Johanna (26 of 88)", "wrong": ["Andrea (9)", "José (7)", "Cissi (7)"], "source": "METHOD: Every :white_check_mark: reaction, counted by who gave it."}, {"id": "R1-04x", "round": 1, "q": "Who gives the most :fire:?", "a": "Kalle (19)", "wrong": ["Cissi (16)", "Desirée (12)", "Don (11)"], "source": "METHOD: Every :fire: reaction, counted by who gave it."}, {"id": "R1-17", "round": 1, "q": "Only one person used :nerd_face: as a reaction in the past year. Who?", "a": "Don", "wrong": ["Emil", "Pia", "Johanna"], "source": "https://goclimateneutral.slack.com/archives/CDHBJHAFL/p1760614639795319"}, {"id": "R2-01", "round": 2, "q": "Who is our heaviest threader, with the most messages inside long threads (6+ messages)?", "a": "Andrea (326)", "wrong": ["Carl (287)", "Kalle (274)", "Don (258)"], "source": "METHOD: Messages in threads with 6 or more messages, among the threads we could read."}, {"id": "R2-02", "round": 2, "q": "Which duo ping-pongs the most, with the most back-and-forth hand-offs in threads?", "a": "Andrea and Johanna (123)", "wrong": ["Carl and Kalle (108)", "Carl and Mathias (100)", "Andrea and Kalle (96)"], "source": "METHOD: How often two people hand the thread back and forth directly, among the threads we could read."}, {"id": "R2-05", "round": 2, "q": "Who started the longest thread we could read in #ongoing-deliveries (27 replies)?", "a": "Cissi", "wrong": ["Carl (22)", "Don (21)", "Mathias"], "source": "https://goclimateneutral.slack.com/archives/C03FG25R55W/p1778136089683199"}, {"id": "R2-07", "round": 2, "q": "Who is our quickest first-replier (median minutes to the first reply in someone else's thread)?", "a": "Johanna (about 10 min across 59 threads)", "wrong": ["Carl (13.9)", "Desirée (14.5)", "Andrea (18.2)"], "source": "METHOD: Median time until the first reply from someone else in a thread. People with 5+ first replies only."}, {"id": "R2-09", "round": 2, "q": "Who replies to their own threads the most, adding follow-ups under their own post?", "a": "Andrea (188)", "wrong": ["Don (119)", "Mathias (118)", "Cissi (107)"], "source": "METHOD: Replies people wrote in threads they started themselves."}, {"id": "R3-01", "round": 3, "q": "Who uses the most emoji in their written messages?", "a": "Andrea (390)", "wrong": ["Tove (214)", "Don (164)", "Johanna (151)"], "source": "METHOD: Emoji and smileys typed into messages, not reactions."}, {"id": "R3-02", "round": 3, "q": "Which two are the smiley queens, with the most emoji per message?", "a": "Tove (1.11) and Desirée (1.05)", "wrong": ["Andrea and Johanna", "Cissi and Don", "Pia and Monisha"], "source": "METHOD: Emoji and smileys typed into messages, divided by number of messages."}, {"id": "R3-03", "round": 3, "q": "Whose text signature is :slightly_smiling_face:?", "a": "Andrea", "wrong": ["Don", "Carl", "Kalle"], "source": "METHOD: Typed :slightly_smiling_face: in messages. Andrea 32, Carl 12, Don 11."}, {"id": "R3-04", "round": 3, "q": "Who has written the most technical words (API, endpoint, deploy, token, docker, code snippets...)?", "a": "Carl (439)", "wrong": ["Pia (175)", "Don (173)", "Emil (135)"], "source": "METHOD: Fixed list of tech words (API, deploy, token, endpoint, docker …) plus code snippets and file paths."}, {"id": "R3-05", "round": 3, "q": "Who has the highest density of technical words per message?", "a": "Leo (1.67 per message)", "wrong": ["Carl (0.83)", "Pia (0.74)", "Emil (0.41)"], "source": "METHOD: Tech words per message. Leo writes long agent-update posts."}, {"id": "R3-06", "round": 3, "q": "Who is the least technical, with the fewest technical words per message?", "a": "Tove (4 technical words in 193 messages)", "wrong": ["Desirée (7 in 132)", "Mathias (29 in 398)", "José (3 in 39)"], "source": "METHOD: Tech words per message, lowest first."}, {"id": "R3-07", "round": 3, "q": "Who most often pastes the Fortnox error about having \"by some mysterious condition\" lost access completely?", "a": "Pia (8 times, Carl 3)", "wrong": ["Mathias", "Kalle", "Johanna"], "source": "https://goclimateneutral.slack.com/archives/C03FG25R55W/p1767341679306109"}, {"id": "R3-08", "round": 3, "q": "Who wrote 'Nya webben är live nu...' (updated 'infra', our repo that controls Cloudflare via Terraform)?", "a": "Johanna", "wrong": ["Carl", "Emil", "Pia"], "source": "https://goclimateneutral.slack.com/archives/C02DN5FRBDK/p1783514375732519"}, {"id": "R4-01", "round": 4, "q": "Who wrote: 'I also managed to win the menti quiz over 180 other entrepreneurs'?", "a": "Kalle", "wrong": ["Tove", "Pia", "Don"], "source": "https://goclimateneutral.slack.com/archives/CDHBJHAFL/p1760555754881689"}, {"id": "R4-02", "round": 4, "q": "A big deal was announced in #wins. Who asked 'WHERE IS THE CAKE??!!!!???'", "a": "Pia", "wrong": ["Tove", "Andrea", "Don"], "source": "https://goclimateneutral.slack.com/archives/C01T8CECN1M/p1761057447410859?thread_ts=1761056616.014929&cid=C01T8CECN1M"}, {"id": "R4-03", "round": 4, "q": "Who posted 'Fire drill at the office!' and then moved the AI knowledge share to next week?", "a": "Leo", "wrong": ["Pia", "Don", "Desirée"], "source": "https://goclimateneutral.slack.com/archives/C59D3PX6U/p1762503465402359"}, {"id": "R4-04", "round": 4, "q": "News of a new VSME partner contract hit #wins. Who replied 'Huge if true'?", "a": "Emil", "wrong": ["Carl", "Johanna", "Kalle"], "source": "https://goclimateneutral.slack.com/archives/C01T8CECN1M/p1773083827408299?thread_ts=1773053781.668829&cid=C01T8CECN1M"}, {"id": "R4-05", "round": 4, "q": "Kalle posted a 'not really golfing' photo with someone from mod:group. Who joked 'Mud:group might be a suitable name'?", "a": "Carl", "wrong": ["Emil", "Don", "Mathias"], "source": "https://goclimateneutral.slack.com/archives/C01JYSQUJ3Z/p1789215336207189?thread_ts=1789214825.246689&cid=C01JYSQUJ3Z"}, {"id": "R4-06", "round": 4, "q": "Who suggested exploring the EU Digital Product Passport alongside PCF in #read_list?", "a": "Monisha", "wrong": ["Don", "Carl", "Johanna"], "source": "https://goclimateneutral.slack.com/archives/C5V1AHEMD/p1788522935339949"}, {"id": "R4-07", "round": 4, "q": "Tove asked for 'growth within planetary boundaries' cases. Who suggested Patagonia (from Reinventing Organizations)?", "a": "José", "wrong": ["Pia", "Cissi", "Andrea"], "source": "https://goclimateneutral.slack.com/archives/C59D3PXJ4/p1771410454960809?thread_ts=1771409785.676319&cid=C59D3PXJ4"}, {"id": "R4-08", "round": 4, "q": "Who posted a message made of nothing but green hearts (17 of them)?", "a": "Desirée", "wrong": ["Tove", "Andrea", "Cissi"], "source": "https://goclimateneutral.slack.com/archives/C01JYSQUJ3Z/p1787554484005209"}, {"id": "R4-09", "round": 4, "q": "Who wrote 'HURRAAAAAAAAAAAA' with 14 emoji?", "a": "Tove", "wrong": ["Desirée", "Andrea", "Johanna"], "source": "https://goclimateneutral.slack.com/archives/C01JYSQUJ3Z/p1760966701158259"}, {"id": "R4-10", "round": 4, "q": "Who wrote '(I won't reveal how you pronounce that - good luck!)' about a UK emissions database?", "a": "Don", "wrong": ["Kalle", "Carl", "Emil"], "source": "https://goclimateneutral.slack.com/archives/C59D3PXJ4/p1763395844184389"}, {"id": "R5-01", "round": 5, "q": "What is our mission?", "a": "Enable every organization to take meaningful climate action.", "wrong": ["Make climate offsetting cheap for everyone", "Help consumers live carbon-neutral lifestyles", "Be the leading CSRD consultancy in the Nordics"], "source": "https://app.notion.com/p/f97c8cd8d8ea4640bc2a8f9af19e4bd0"}, {"id": "R5-02", "round": 5, "q": "Which four values does our DNA name?", "a": "Kind, brave, integrity, trust", "wrong": ["Kind, bold, transparent, fast", "Curious, brave, honest, playful", "Integrity, speed, ownership, trust"], "source": "https://app.notion.com/p/f97c8cd8d8ea4640bc2a8f9af19e4bd0"}, {"id": "R5-03", "round": 5, "q": "Where do you find info from HR?", "a": "Notion (HR-circle page) AND Slack (#hr-circle)", "wrong": ["Only in Notion", "A shared HR folder in Google Drive", "Ask your mentor, HR is not documented"], "source": "https://app.notion.com/p/fc63acbc92c64dbbbf9a6779516843c4"}, {"id": "R5-04", "round": 5, "q": "You want paid leave. Whom do you ask, and where is it reported if granted?", "a": "Ask HR (Slack DM or #hr-circle); report it in Visma as a regular work day", "wrong": ["Email payroll; report in Google Calendar", "Ask your mentor; report in Notion", "Fill in a paper form; report in Fortnox"], "source": "https://app.notion.com/p/263a29d6cfc080488bf4e5ee99b6567a"}, {"id": "R5-05", "round": 5, "q": "In the 2025 strategy, which prevented-emissions milestone had we passed?", "a": "1,000,000 tonnes CO2e", "wrong": ["500,000 tonnes", "790,000 tonnes", "5,000,000 tonnes"], "source": "https://docs.google.com/presentation/d/12tzoZ0oNL69H4ilFwomwmGBBmBWC7At-zQ9vk81zWB0/edit"}, {"id": "R5-06", "round": 5, "q": "How many boards does our Miro team have (mid-October 2026)?", "a": "298", "wrong": ["120", "187", "412"], "source": "https://miro.com/app/board/uXjVIvXY4qQ=/"}, {"id": "R5-07", "round": 5, "q": "What does the 'Monday Meeting!!1' Miro board ask you to volunteer for every week?", "a": "Knowledge sharing", "wrong": ["Taking the notes", "Bringing the fika", "Chairing the retro"], "source": "https://miro.com/app/board/uXjVKWMaoqU=/"}, {"id": "R5-08", "round": 5, "q": "Which tool did Cissi pick for the new big-customer project board (free plan, max 10 people)?", "a": "Trello", "wrong": ["Notion", "Miro", "Jira"], "source": "https://goclimateneutral.slack.com/archives/CDHBJHAFL/p1777017376392799"}, {"id": "R5-09", "round": 5, "q": "VSME has been renamed. What do we call it now?", "a": "VS", "wrong": ["VSME Plus", "ESRS-Lite", "SME-S"], "source": "https://goclimateneutral.slack.com/archives/C07TAR8TQJX/p1790861672393419"}, {"id": "R5-10", "round": 5, "q": "Who posts the most top-level messages in #miscellaneous?", "a": "Cissi (21)", "wrong": ["Andrea (10)", "Tove (10)", "Desirée (8)"], "source": "METHOD: Top-level posts (not thread replies) in #miscellaneous, last 12 months."}]};
+const EMO={'+1':'👍',tada:'🎉',heart:'❤️',green_heart:'💚',sunny:'☀️',eyes:'👀',star2:'🌟',slightly_smiling_face:'🙂',white_check_mark:'✅',ok_hand:'👌',fire:'🔥',nerd_face:'🤓',heavy_check_mark:'✔️',thumbsup:'👍',heart_eyes:'😍',pray:'🙏',clap:'👏'};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const emo=s=>esc(s).replace(/:([a-z0-9_+\-]+):/g,(m,n)=>EMO[n]||m);
+const label=s=>String(s).replace(/\s*\([^)]*\)/g,'').trim();
+const fmt=n=>Number(n).toLocaleString('sv-SE');
+function seeded(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return()=>{h+=0x6D2B79F5;let t=Math.imul(h^h>>>15,1|h);t^=t+Math.imul(t^t>>>7,61|t);return((t^t>>>14)>>>0)/4294967296}}
+function shuffle(a,rnd){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const OPTS={};
+function optionsFor(q){return OPTS[q.id]||(OPTS[q.id]=shuffle([{t:q.a,ok:true},...q.wrong.map(w=>({t:w,ok:false}))],seeded(q.id)))}
+const QS=QUIZ.questions;QS.forEach((q,i)=>q.n=i+1);
+const roundOf=id=>QUIZ.rounds.find(r=>r.id===id);
+const OCOL=['var(--oa)','var(--ob)','var(--oc)','var(--od)'];
+const ROUND_BLURB={1:'Who clicks what. Emoji reactions, counted.',2:'Long threads, quick replies, back and forth.',3:'Smileys, shortcodes and tech talk.',4:'Quote on screen. Name the poster.',5:'What we say we do, and where it is written.'};
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+const SPR={
+coin:'<svg class="sprite spin" width="48" height="48" viewBox="0 0 12 12" aria-hidden="true"><g fill="#ffcf33"><rect x="4" y="1" width="4" height="1"/><rect x="3" y="2" width="6" height="1"/><rect x="2" y="3" width="8" height="6"/><rect x="3" y="9" width="6" height="1"/><rect x="4" y="10" width="4" height="1"/></g><g fill="#a07a00"><rect x="5" y="3" width="2" height="6"/></g><rect x="3" y="3" width="1" height="2" fill="#fff6c2"/></svg>',
+invader:'<svg class="sprite bob" width="64" height="48" viewBox="0 0 11 8" aria-hidden="true"><g fill="#37e3d2"><rect x="2" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="2" y="2" width="7" height="1"/><rect x="1" y="3" width="2" height="1"/><rect x="4" y="3" width="3" height="1"/><rect x="8" y="3" width="2" height="1"/><rect x="0" y="4" width="11" height="2"/><rect x="0" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="3" y="7" width="2" height="1"/><rect x="6" y="7" width="2" height="1"/></g><g fill="#1a1033"><rect x="3" y="4" width="2" height="1"/><rect x="6" y="4" width="2" height="1"/></g></svg>',
+heart:'<svg class="sprite bob" width="48" height="44" viewBox="0 0 9 8" aria-hidden="true"><g fill="#ff4f9a"><rect x="1" y="0" width="3" height="1"/><rect x="5" y="0" width="3" height="1"/><rect x="0" y="1" width="9" height="3"/><rect x="1" y="4" width="7" height="1"/><rect x="2" y="5" width="5" height="1"/><rect x="3" y="6" width="3" height="1"/><rect x="4" y="7" width="1" height="1"/></g><rect x="1" y="1" width="2" height="1" fill="#ffd0e6"/></svg>',
+crown:'<svg class="sprite bob" width="72" height="48" viewBox="0 0 9 6" aria-hidden="true"><g fill="#ffcf33"><rect x="0" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="0" y="1" width="2" height="1"/><rect x="3" y="1" width="3" height="1"/><rect x="7" y="1" width="2" height="1"/><rect x="0" y="2" width="9" height="3"/></g><g fill="#a07a00"><rect x="0" y="5" width="9" height="1"/></g><rect x="2" y="3" width="1" height="1" fill="#ff4f9a"/><rect x="4" y="3" width="1" height="1" fill="#37e3d2"/><rect x="6" y="3" width="1" height="1" fill="#ff4f9a"/></svg>'
+};
+
+/* ---- chiptune + sfx (Web Audio, generated in the page) ---- */
+const AUDIO={music:true,sfx:true};
+const NOTE={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+function hz(n){const m=/^([A-G])(#?)(\d)$/.exec(n);if(!m)return 0;return 440*Math.pow(2,((NOTE[m[1]]+(m[2]?1:0)+(+m[3]+1)*12)-69)/12)}
+function actx(){const A=window.AudioContext||window.webkitAudioContext;if(!A)return null;actx.c=actx.c||new A();return actx.c}
+const SEQ=s=>s.trim().split(/\s+/);
+const TRACKS={
+  theme:{bpm:152,vol:.05,lead:SEQ('E5 G5 C6 G5 E5 G5 C6 . D5 F5 B5 F5 D5 F5 B5 . C5 E5 A5 E5 C5 E5 A5 . D5 G5 B5 G5 D5 G5 D6 C6 C6 . B5 . A5 . G5 . A5 . G5 . F5 . E5 . D5 E5 F5 G5 A5 B5 C6 . G5 . . . C6 - - .'),bass:'C3 G2 A2 G2 C3 F2 G2 C3'.split(' '),drums:true},
+  think:{bpm:112,vol:.028,lead:SEQ('A4 . C5 . E5 . C5 . G4 . B4 . D5 . B4 . F4 . A4 . C5 . A4 . E4 . G#4 . B4 . E5 .'),bass:'A2 G2 F2 E2'.split(' '),drums:false}
+};
+const music={cur:null,want:null,step:0,next:0,timer:null,
+  set(name){this.want=name;this.sync()},
+  sync(){const want=AUDIO.music?this.want:null;if(want===this.cur&&(this.timer||!want))return;this.stop();this.cur=want;if(!want)return;const c=actx();if(!c)return;this.step=0;this.next=c.currentTime+.08;this.timer=setInterval(()=>this.tick(),30)},
+  stop(){if(this.timer)clearInterval(this.timer);this.timer=null;this.cur=null},
+  tick(){const c=actx(),T=TRACKS[this.cur];if(!c||!T)return;if(c.state!=='running'){this.next=c.currentTime+.05;return}const dur=60/T.bpm/2;
+    while(this.next<c.currentTime+.18){const L=T.lead.length,i=this.step%L,n=T.lead[i];
+      if(n!=='.'&&n!=='-'){let len=dur*.9,j=i+1;while(T.lead[j%L]==='-'){len+=dur;j++}this.tone('square',hz(n),this.next,len,T.vol)}
+      const spb=L/T.bass.length,bi=Math.floor(i/spb)%T.bass.length,p=i%spb;
+      if(p%2===0)this.tone('triangle',hz(T.bass[bi])*(p%4===2?2:1),this.next,dur*1.7,T.vol*2.2);
+      if(T.drums&&(i%8===2||i%8===6))this.noise(this.next,.05,T.vol*1.6);
+      if(T.drums&&i%2===1)this.noise(this.next,.02,T.vol*.5);
+      this.next+=dur;this.step++}},
+  tone(type,f,t,d,v){const c=actx(),o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.setValueAtTime(v,t+d*.7);g.gain.linearRampToValueAtTime(0,t+d);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+d+.02)},
+  noise(t,d,v){const c=actx();if(!this.buf){this.buf=c.createBuffer(1,c.sampleRate*.1,c.sampleRate);const a=this.buf.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=Math.random()*2-1}const s=c.createBufferSource(),g=c.createGain();s.buffer=this.buf;g.gain.setValueAtTime(v,t);g.gain.linearRampToValueAtTime(0,t+d);s.connect(g);g.connect(c.destination);s.start(t);s.stop(t+d+.01)}
+};
+['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,()=>{const c=actx();if(c&&c.state==='suspended')c.resume();music.sync()},{passive:true}));
+function sfx(kind){if(!AUDIO.sfx)return;try{const c=actx();if(!c||c.state!=='running')return;const seq={blip:[[660,.06]],reveal:[[523,.08],[659,.08],[784,.14]],next:[[440,.05],[587,.05]],win:[[523,.1],[659,.1],[784,.1],[1047,.25]],bad:[[330,.1],[247,.2]],join:[[784,.05],[1047,.08]]}[kind];let t=c.currentTime;seq.forEach(([f,d])=>{const o=c.createOscillator(),g=c.createGain();o.type='square';o.frequency.value=f;g.gain.value=.04;o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+d);t+=d})}catch(e){}}
+function confetti(){const box=document.getElementById('conf');if(!box)return;box.innerHTML='';const cs=['#ffcf33','#ff4f9a','#37e3d2','#5fe38a','#f6efd9'];for(let i=0;i<46;i++){const e=document.createElement('i');e.style.left=Math.random()*100+'%';e.style.background=cs[i%cs.length];e.style.animationDelay=(Math.random()*.5)+'s';e.style.animationDuration=(1.2+Math.random()*1.2)+'s';box.appendChild(e)}setTimeout(()=>box.innerHTML='',3200)}
+function srcHTML(s){if(/^https?:\/\//.test(s))return `<span class="lab">SOURCE</span><a href="${esc(s)}" target="_blank" rel="noopener">${esc(s.replace(/^https?:\/\//,'').slice(0,80))}</a>`;return `<span class="lab">HOW WE COUNTED</span>${emo(s.replace(/^METHOD:\s*/,''))}`}
+function timerHTML(on,elapsedMs,stopped){return `<div class="timer ${on?'':'off'} ${stopped?'stop':''}"><i style="animation-delay:-${Math.max(0,elapsedMs/1000).toFixed(2)}s"></i></div>`}
+function optHTML(o,i,opts){opts=opts||{};const cls=opts.revealed?(o.ok?'right':'wrong'):'';const full=o.t.trim(),l=label(full);
+  return `<div class="opt ${cls}" style="--c:${OCOL[i]}"><span class="k">${'ABCD'[i]}</span><span class="t">${opts.revealed?emo(full):emo(l)}</span>${opts.count!=null?`<span class="cnt">×${opts.count}</span><span class="dist" style="width:${opts.share*100}%"></span>`:''}</div>`}
+
+const PFX='structure-capital-quiz-v1-';
+const P=new URLSearchParams(location.search);
+const LOCAL=P.has('local');
+const T_MS=20000;
+const app=()=>document.getElementById('app');
+const $=s=>document.querySelector(s);
+const rid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+
+/* ---------------- transport: PeerJS (real) or BroadcastChannel (?local, same-browser testing) ---------------- */
+function mkConn(send,close){const h={};return{send,close:close||(()=>{}),on(ev,fn){(h[ev]=h[ev]||[]).push(fn)},emit(ev,x){(h[ev]||[]).forEach(f=>{try{f(x)}catch(e){console.error(e)}})}}}
+const Transport={
+  host(code,cb){
+    if(LOCAL){const bc=new BroadcastChannel('scq-'+code),conns={};
+      bc.onmessage=e=>{const m=e.data;if(!m||m.to!=='host')return;
+        if(m.type==='open'){if(conns[m.from])conns[m.from].emit('close');const c=conns[m.from]=mkConn(d=>bc.postMessage({to:m.from,from:'host',type:'data',data:d}));bc.postMessage({to:m.from,from:'host',type:'ack'});cb.onConn(c)}
+        else if(m.type==='data'&&conns[m.from])conns[m.from].emit('data',m.data);
+        else if(m.type==='close'&&conns[m.from]){conns[m.from].emit('close');delete conns[m.from]}};
+      bc.postMessage({to:'*',from:'host',type:'hostup'});cb.onStatus('online');return}
+    if(!window.Peer){cb.onStatus('PeerJS did not load. Check the internet connection.');return}
+    let peer;
+    const start=()=>{peer=new Peer(PFX+code,{debug:0});
+      peer.on('open',()=>cb.onStatus('online'));
+      peer.on('connection',dc=>{const c=mkConn(d=>{try{dc.send(d)}catch(e){}},()=>{try{dc.close()}catch(e){}});
+        dc.on('data',d=>c.emit('data',d));dc.on('close',()=>c.emit('close'));dc.on('error',()=>c.emit('close'));dc.on('open',()=>cb.onConn(c))});
+      peer.on('disconnected',()=>{cb.onStatus('reconnecting');setTimeout(()=>{try{if(!peer.destroyed)peer.reconnect()}catch(e){}},1500)});
+      peer.on('error',e=>{if(e.type==='unavailable-id'){cb.onStatus('code busy, retrying');try{peer.destroy()}catch(_){};setTimeout(start,4000)}
+        else if(e.type==='peer-unavailable'){}else cb.onStatus('problem: '+e.type)})};
+    start();
+  },
+  join(code,cb){
+    if(LOCAL){const id=rid(),bc=new BroadcastChannel('scq-'+code);let c=null;
+      const hello=()=>{if(!c)bc.postMessage({to:'host',from:id,type:'open'})};
+      bc.onmessage=e=>{const m=e.data;if(m&&m.type==='hostup'){c=null;cb.onStatus('lost');hello();return}if(!m||m.to!==id)return;
+        if(m.type==='ack'){c=mkConn(d=>bc.postMessage({to:'host',from:id,type:'data',data:d}));cb.onStatus('online');cb.onOpen(c)}
+        else if(m.type==='data'&&c)c.emit('data',m.data)};
+      cb.onStatus('connecting');hello();setInterval(hello,1500);
+      addEventListener('pagehide',()=>bc.postMessage({to:'host',from:id,type:'close'}));return}
+    if(!window.Peer){cb.onStatus('PeerJS did not load. Check the internet connection.');return}
+    const peer=new Peer({debug:0});let attempt=0,retryT=null;
+    const retry=ms=>{clearTimeout(retryT);retryT=setTimeout(connect,ms)};
+    const connect=()=>{if(peer.destroyed)return;if(peer.disconnected){try{peer.reconnect()}catch(e){}return retry(2500)}
+      const my=++attempt;cb.onStatus('connecting');
+      const dc=peer.connect(PFX+code,{reliable:true});let opened=false;
+      const c=mkConn(d=>{try{dc.send(d)}catch(e){}});
+      dc.on('open',()=>{if(my!==attempt)return;opened=true;cb.onStatus('online');cb.onOpen(c)});
+      dc.on('data',d=>{if(my===attempt)c.emit('data',d)});
+      const lost=()=>{if(my!==attempt)return;attempt++;cb.onStatus('lost');retry(2000)};
+      dc.on('close',lost);dc.on('error',lost);
+      setTimeout(()=>{if(!opened&&my===attempt){attempt++;try{dc.close()}catch(e){}retry(500)}},9000)};
+    peer.on('open',connect);
+    peer.on('error',e=>{if(e.type==='peer-unavailable'){attempt++;cb.onStatus('nohost');retry(3000)}
+      else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){cb.onStatus('network');retry(4000)}
+      else cb.onStatus('problem: '+e.type)});
+    peer.on('disconnected',()=>setTimeout(()=>{try{if(!peer.destroyed)peer.reconnect()}catch(e){}},1500));
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!peer.destroyed&&peer.disconnected){try{peer.reconnect()}catch(e){}}});
+  }
+};
+
+/* =========================================================== HOST =========================================================== */
+const HK='scq-live-host';
+let H=null,hostStatus='starting';
+const conns={};
+let allInFor=null;
+const hflow=[{t:'lobby'}];
+QUIZ.rounds.forEach((r,ri)=>{hflow.push({t:'round',r});QS.filter(q=>q.round===r.id).forEach(q=>hflow.push({t:'q',q}));if(ri<QUIZ.rounds.length-1)hflow.push({t:'board',r})});
+hflow.push({t:'final'});
+const CODE_CH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const makeCode=()=>Array.from({length:4},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
+const saveH=()=>LS.set(HK,H);
+const joinURL=()=>location.origin+location.pathname+'?room='+H.code+(LOCAL?'&local':'');
+const scoreOf=p=>H.revealedQs.reduce((s,id)=>s+((p.ans[id]&&p.ans[id].pts)||0),0);
+function ranked(){const arr=Object.entries(H.players).map(([cid,p])=>({cid,name:p.name,score:scoreOf(p)})).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'sv'));
+  let last=null,rank=0;arr.forEach((x,i)=>{if(x.score!==last){rank=i+1;last=x.score}x.rank=rank});return arr}
+const cleanName=n=>String(n||'').replace(/[\u0000-\u001f<>]/g,'').replace(/\s+/g,' ').trim().slice(0,16);
+function uniqueName(name,cid){let n=name,i=2;const taken=x=>Object.entries(H.players).some(([k,p])=>k!==cid&&p.name.toLowerCase()===x.toLowerCase());while(taken(n))n=name.slice(0,13)+' '+i++;return n}
+const curQ=()=>{const it=hflow[H.pos];return it.t==='q'?it.q:null};
+
+function startHost(resume){
+  if(!resume)H={code:makeCode(),pos:0,revealed:false,openedAt:0,players:{},banned:[],revealedQs:[],timer:true,music:true,sfx:true};
+  AUDIO.music=H.music;AUDIO.sfx=H.sfx;saveH();
+  history.replaceState(null,'',location.pathname+'?host'+(LOCAL?'&local':''));
+  try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
+  Transport.host(H.code,{onStatus:s=>{hostStatus=s;const el=$('#hstat');if(el)el.outerHTML=statusHTML()},onConn:c=>{
+    c.on('data',d=>hostMsg(c,d));
+    c.on('close',()=>{if(c.cid&&conns[c.cid]===c){delete conns[c.cid];refreshLive()}})}});
+  hrender();
+}
+function statusHTML(){const on=hostStatus==='online';return `<span class="status ${on?'on':''}" id="hstat"><i></i>${on?'LIVE':esc(hostStatus.toUpperCase())}</span>`}
+
+function hostMsg(c,d){
+  if(!d||typeof d!=='object')return;
+  if(d.t==='hello'){
+    const cid=String(d.cid||'').slice(0,40),name=cleanName(d.name);if(!cid||!name)return;
+    if(H.banned.includes(cid)){c.send({t:'kicked'});return}
+    let p=H.players[cid],isNew=!p;
+    if(!p)p=H.players[cid]={name:uniqueName(name,cid),ans:{}};
+    else if(H.pos===0&&name!==p.name)p.name=uniqueName(name,cid);
+    if(conns[cid]&&conns[cid]!==c){try{conns[cid].close()}catch(e){}}
+    c.cid=cid;conns[cid]=c;saveH();sendState(cid);refreshLive();if(isNew)sfx('join');
+  }else if(d.t==='answer'){
+    const cid=c.cid,p=H.players[cid],q=curQ();
+    if(!p||!q||H.revealed||d.qid!==q.id||p.ans[q.id])return;
+    const ch=d.c|0;if(ch<0||ch>3)return;
+    const ms=Math.max(0,Date.now()-H.openedAt),ok=optionsFor(q)[ch].ok;
+    p.ans[q.id]={c:ch,ms,pts:ok?Math.round(1000-500*Math.min(ms,T_MS)/T_MS):0};
+    saveH();sendState(cid);refreshLive();
+  }
+}
+function sendState(cid){
+  const c=conns[cid],p=H.players[cid];if(!c||!p)return;
+  const it=hflow[H.pos],rk=ranked(),me=rk.find(x=>x.cid===cid);
+  const m={t:'state',phase:it.t,name:p.name,total:QS.length,nPlayers:rk.length,score:me.score,rank:me.rank};
+  if(it.r){m.round=it.r.name;m.roundId=it.r.id}
+  if(it.t==='q'){const q=it.q,o=optionsFor(q),a=p.ans[q.id];
+    m.qid=q.id;m.qn=q.n;m.q=q.q;m.round=roundOf(q.round).name;m.labels=o.map(x=>label(x.t));m.revealed=H.revealed;
+    m.my=a?{c:a.c}:null;
+    if(H.revealed){m.correct=o.findIndex(x=>x.ok);if(a)m.my={c:a.c,pts:a.pts,ok:a.pts>0}}}
+  if(it.t==='final')m.top=rk.slice(0,3).map(x=>x.name);
+  c.send(m);
+}
+const broadcast=()=>Object.keys(conns).forEach(sendState);
+
+function hAdvance(){
+  const it=hflow[H.pos];
+  if(it.t==='q'&&!H.revealed){H.revealed=true;if(!H.revealedQs.includes(it.q.id))H.revealedQs.push(it.q.id);saveH();hrender();broadcast();sfx('reveal');
+    if(Object.values(H.players).some(p=>p.ans[it.q.id]&&p.ans[it.q.id].pts>0))confetti();return}
+  if(H.pos<hflow.length-1){H.pos++;const n=hflow[H.pos];H.revealed=n.t==='q'&&H.revealedQs.includes(n.q.id);if(n.t==='q'&&!H.revealed)H.openedAt=Date.now();
+    saveH();window.scrollTo(0,0);hrender();broadcast();if(n.t==='final'){sfx('win');confetti()}else sfx('next')}
+}
+function hBack(){if(H.pos>0){H.pos--;const n=hflow[H.pos];H.revealed=n.t==='q'&&H.revealedQs.includes(n.q.id);
+  if(n.t==='q'&&!H.revealed)H.openedAt=Date.now();saveH();hrender();broadcast()}}
+
+function namesHTML(kind){
+  const q=curQ();
+  return Object.entries(H.players).map(([cid,p])=>{const on=!!conns[cid];
+    if(kind==='lobby')return `<button class="nm ${on?'':'off'}" data-kick="${esc(cid)}" title="Tap twice to remove">${esc(p.name)}</button>`;
+    const a=q&&p.ans[q.id];if(!a)return '';return `<span class="nm">${esc(p.name)}</span>`}).join('');
+}
+function answeredHTML(){
+  const q=curQ();if(!q)return '';
+  const ids=Object.keys(H.players),done=ids.filter(id=>H.players[id].ans[q.id]).length;
+  const expected=ids.filter(id=>conns[id]||H.players[id].ans[q.id]).length;
+  const all=expected>0&&done>=expected;
+  if(all&&allInFor!==q.id){allInFor=q.id;sfx('join')}
+  return `<div class="qhead" style="margin:0"><span>ANSWERED ${done}/${expected}</span>${all?'<span class="allin blink">ALL IN!</span>':''}</div><div class="names" style="justify-content:flex-start">${namesHTML('q')}</div>`;
+}
+function refreshLive(){
+  const it=hflow[H.pos];
+  if(it.t==='lobby'){const el=$('#lob');if(el){el.innerHTML=namesHTML('lobby');bindKick()}const n=$('#nplayers');if(n)n.textContent=Object.keys(H.players).length}
+  else if(it.t==='q'&&!H.revealed){const el=$('#ansd');if(el)el.innerHTML=answeredHTML()}
+}
+function boardHTML(rows,max){max=Math.max(1,...rows.map(x=>x.score));return `<div class="board">${rows.map(x=>`<div class="r ${x.rank===1?'top':''}"><span class="n">${x.rank}.</span><div>${esc(x.name)}<div class="bar2"><i style="width:${x.score/max*100}%"></i></div></div><span class="s">${fmt(x.score)}</span></div>`).join('')}</div>`}
+
+function hrender(){
+  const it=hflow[H.pos];
+  music.set(it.t==='q'?(H.revealed?null:'think'):'theme');
+  const q=curQ();
+  let h=`<div class="bar"><span class="logo">STRUCTURE CAPITAL QUIZ</span><span class="meta">${it.t!=='lobby'?`<span>JOIN: <span style="color:var(--coin)">${H.code}</span></span>`:''}${q?`<span>Q ${q.n}/${QS.length}</span>`:''}${statusHTML()}<button class="chip" id="bT" aria-pressed="${H.timer}">TIMER</button><button class="chip" id="bM" aria-pressed="${H.music}">MUSIC</button><button class="chip" id="bS" aria-pressed="${H.sfx}">SFX</button></span></div>`;
+  if(it.t==='lobby'){
+    const url=joinURL();
+    h+=`<div class="win title"><div class="row">${SPR.invader}${SPR.coin}${SPR.heart}</div><h1>STRUCTURE CAPITAL QUIZ</h1>
+      <div class="lobby"><div id="qr" aria-label="QR code to join"></div><div class="steps">
+        <div class="s">1. Scan the code or open</div><div class="url">${esc(url.replace(/\?.*/,''))}</div>
+        <div class="s">2. Enter the game code</div><div class="code">${H.code}</div>
+        <div class="s">3. Pick a name and wait for the start</div></div></div>
+      <div class="sub">PLAYERS: <span id="nplayers">${Object.keys(H.players).length}</span> • TAP A NAME TWICE TO REMOVE IT</div>
+      <div class="names" id="lob">${namesHTML('lobby')}</div>
+      <div class="cta" style="width:100%"><button class="btn ghost" id="newgame">NEW GAME</button><button class="btn" id="go">▶ START QUIZ</button></div></div>`;
+  }else if(it.t==='round'){
+    h+=`<div class="win round"><span class="tag">ROUND ${it.r.id} OF ${QUIZ.rounds.length}</span><h2>${esc(it.r.name.toUpperCase())}</h2><p>${ROUND_BLURB[it.r.id]||''}</p><div>${SPR.coin}</div><div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn" id="go">▶ GO</button></div></div>`;
+  }else if(it.t==='q'){
+    const o=optionsFor(q);
+    h+=`<div class="win"><div class="qhead"><span>ROUND ${q.round} • ${esc(roundOf(q.round).name.toUpperCase())}</span><span class="qnum">Q${q.n}</span></div>`;
+    if(!H.revealed){
+      h+=timerHTML(H.timer,Date.now()-H.openedAt,false)+`<p class="qtext">${emo(q.q)}</p><div class="opts">${o.map((x,i)=>optHTML(x,i)).join('')}</div><div class="answered" id="ansd">${answeredHTML()}</div>`;
+    }else{
+      const ps=Object.values(H.players),counts=[0,0,0,0];ps.forEach(p=>{const a=p.ans[q.id];if(a)counts[a.c]++});
+      const n=Math.max(1,counts.reduce((a,b)=>a+b,0));
+      const right=ps.filter(p=>p.ans[q.id]&&p.ans[q.id].pts>0).sort((a,b)=>a.ans[q.id].ms-b.ans[q.id].ms);
+      h+=`<p class="qtext">${emo(q.q)}</p><div class="opts">${o.map((x,i)=>optHTML(x,i,{revealed:true,count:counts[i],share:counts[i]/n})).join('')}</div>
+        <div class="reveal"><div class="ans"><b>ANSWER: ${'ABCD'[o.findIndex(x=>x.ok)]}</b>${emo(q.a)}</div><div class="src">${srcHTML(q.source)}</div>
+        ${right.length?`<div class="fast">FASTEST: ${esc(right[0].name)} (${(right[0].ans[q.id].ms/1000).toFixed(1)} s)</div><div class="names" style="justify-content:flex-start">${right.map(p=>`<span class="nm ok">${esc(p.name)} +${p.ans[q.id].pts}</span>`).join('')}</div>`:`<div class="fast">NOBODY GOT IT!</div>`}</div>`;
+    }
+    h+=`<div class="cta" style="margin-top:20px"><button class="btn ghost" id="back">◀ BACK</button><span class="hint">${H.revealed?'SPACE = next':'SPACE = reveal'}</span><button class="btn" id="go">${H.revealed?'NEXT ▶':'REVEAL'}</button></div></div>`;
+  }else if(it.t==='board'){
+    const rk=ranked();
+    h+=`<div class="win round"><span class="tag">AFTER ROUND ${it.r.id}</span><h2>LEADERBOARD</h2>${rk.length?boardHTML(rk.slice(0,10)):'<p>No players yet.</p>'}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn" id="go">NEXT ROUND ▶</button></div></div>`;
+  }else{
+    const rk=ranked(),t=[rk[1],rk[0],rk[2]],H_=[110,170,80],place=[2,1,3];
+    h+=`<div class="win title"><h1>GAME OVER</h1>${rk[0]?`<div class="sub">WINNER</div><div class="code" style="font-size:clamp(22px,5vw,40px)">${esc(rk[0].name)}</div>`:''}
+      <div class="podium">${t.map((x,i)=>`<div class="pod">${x?`${place[i]===1?SPR.crown:''}<div class="who">${esc(x.name)}</div><div class="pts">${fmt(x.score)}</div>`:''}<div class="blk" style="height:${H_[i]}px">${place[i]}</div></div>`).join('')}</div>
+      ${rk.length>3?boardHTML(rk):''}<div class="cta" style="width:100%"><button class="btn ghost" id="back">◀ BACK</button><button class="btn ghost" id="newgame">NEW GAME</button></div></div>`;
+  }
+  h+=`<div class="foot">Slack data: Oct 2025 – Oct 2026, 14 public channels. Thread stats only cover the threads we could read. Faster correct answers score more (500–1000).</div>`;
+  app().innerHTML=h;
+  if(it.t==='lobby')drawQR();
+  hbind();
+}
+function drawQR(){const el=$('#qr');if(!el)return;if(window.QRCode){try{new QRCode(el,{text:joinURL(),width:220,height:220,colorDark:'#1a1033',colorLight:'#f6efd9',correctLevel:QRCode.CorrectLevel.M})}catch(e){el.remove()}}else el.remove()}
+let kickArm=null;
+function bindKick(){document.querySelectorAll('[data-kick]').forEach(b=>b.onclick=()=>{const cid=b.dataset.kick;
+  if(kickArm!==cid){kickArm=cid;document.querySelectorAll('[data-kick]').forEach(x=>x.classList.toggle('kick',x.dataset.kick===cid));return}
+  kickArm=null;H.banned.push(cid);delete H.players[cid];if(conns[cid]){conns[cid].send({t:'kicked'});delete conns[cid]}saveH();refreshLive()})}
+let newArm=false;
+function hbind(){
+  $('#bT').onclick=()=>{H.timer=!H.timer;saveH();hrender()};
+  $('#bM').onclick=()=>{H.music=AUDIO.music=!H.music;saveH();music.sync();hrender()};
+  $('#bS').onclick=()=>{H.sfx=AUDIO.sfx=!H.sfx;saveH();hrender()};
+  if($('#go'))$('#go').onclick=hAdvance;
+  if($('#back'))$('#back').onclick=hBack;
+  const ng=$('#newgame');if(ng)ng.onclick=()=>{if(!newArm){newArm=true;ng.textContent='SURE? TAP AGAIN';ng.classList.add('danger');setTimeout(()=>{newArm=false;if(ng.isConnected){ng.textContent='NEW GAME';ng.classList.remove('danger')}},3000);return}
+    newArm=false;Object.values(conns).forEach(c=>{try{c.send({t:'ended'});c.close()}catch(e){}});LS.set(HK,null);location.href=location.pathname+'?host'+(LOCAL?'&local':'')};
+  bindKick();
+}
+document.addEventListener('keydown',e=>{if(!H)return;const tg=(e.target&&e.target.tagName)||'';if(tg==='INPUT')return;if(tg==='BUTTON'&&(e.key==='Enter'||e.key===' '))return;
+  if(e.key===' '||e.key==='Enter'||e.key==='ArrowRight'){e.preventDefault();hAdvance()}else if(e.key==='ArrowLeft')hBack()});
+setInterval(()=>{if(H&&hflow[H.pos].t==='q'&&!H.revealed)broadcast()},5000);
+
+/* =========================================================== PLAYER =========================================================== */
+let PL={code:'',name:'',cid:'',conn:null,status:'',state:null,screen:'join',err:''};
+function pStart(){
+  PL.cid=LS.get('scq-cid-'+PL.code,null)||rid();LS.set('scq-cid-'+PL.code,PL.cid);
+  LS.set('scq-name',PL.name);LS.set('scq-room',PL.code);
+  PL.screen='wait';prender();
+  Transport.join(PL.code,{onStatus:s=>{PL.status=s;const el=$('#pstat');if(el)el.textContent=pStatusText();else if(PL.screen==='wait')prender()},
+    onOpen:c=>{PL.conn=c;c.on('data',pMsg);c.send({t:'hello',cid:PL.cid,name:PL.name})}});
+}
+function pStatusText(){return {online:'● CONNECTED',connecting:'CONNECTING…',lost:'CONNECTION LOST, RECONNECTING…',nohost:'GAME NOT FOUND. CHECK THE CODE. RETRYING…',network:'NETWORK PROBLEM, RETRYING…'}[PL.status]||String(PL.status||'').toUpperCase()}
+let lastPhaseKey='';
+function pMsg(m){
+  if(!m||typeof m!=='object')return;
+  if(m.t==='kicked'){PL.screen='kicked';LS.set('scq-cid-'+PL.code,null);prender();return}
+  if(m.t==='ended'){PL.screen='ended';prender();return}
+  if(m.t!=='state')return;
+  const key=m.phase+'|'+(m.qid||m.roundId||'')+'|'+(m.revealed?1:0);
+  const changed=key!==lastPhaseKey;lastPhaseKey=key;
+  PL.state=m;PL.name=m.name;PL.screen='game';
+  if(changed){if(m.phase==='q'&&m.revealed){if(m.my&&m.my.ok){sfx('win');confetti()}else sfx('bad')}else if(m.phase==='final'&&m.rank===1)confetti();try{navigator.vibrate&&navigator.vibrate(changed&&m.phase==='q'&&!m.revealed?60:20)}catch(e){}}
+  prender();
+}
+function pAnswer(i){const s=PL.state;if(!s||s.phase!=='q'||s.revealed||s.my||!PL.conn)return;s.my={c:i};PL.conn.send({t:'answer',qid:s.qid,c:i});sfx('blip');try{navigator.vibrate&&navigator.vibrate(30)}catch(e){}prender()}
+function prender(){
+  let h=`<div class="phone"><div class="bar"><span class="logo">SCQ</span><span class="meta">${PL.code?`<span>GAME ${esc(PL.code)}</span>`:''}${PL.state?`<span style="color:var(--coin)">${fmt(PL.state.score)} PTS</span>`:''}</span></div>`;
+  if(PL.screen==='join'){
+    h+=`<div class="win title" style="padding-block:24px"><div class="row">${SPR.invader}</div><h1 style="font-size:22px">STRUCTURE<br>CAPITAL<br>QUIZ</h1>
+      <form id="jf" class="phone" style="gap:12px;text-align:left" novalidate>
+      ${P.get('room')?'':`<div class="field"><label for="code">GAME CODE</label><input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" value="${esc(PL.code)}"></div>`}
+      <div class="field"><label for="name">YOUR NAME</label><input id="name" maxlength="16" autocomplete="nickname" value="${esc(PL.name)}" placeholder="e.g. Emoji Queen"></div>
+      <div class="err" id="jerr">${esc(PL.err)}</div><button class="btn" type="submit">▶ JOIN</button></form>
+      ${P.get('room')?'':'<button class="chip" id="hostbtn" style="margin-top:8px">I AM THE HOST</button>'}</div>`;
+  }else if(PL.screen==='wait'){
+    h+=`<div class="win center"><div>${SPR.coin}</div><p class="big y">JOINING…</p><p class="hint">${esc(pStatusText())}</p></div>`;
+  }else if(PL.screen==='kicked'||PL.screen==='ended'){
+    h+=`<div class="win center"><p class="big b">${PL.screen==='kicked'?'REMOVED':'GAME ENDED'}</p><p class="hint">${PL.screen==='kicked'?'The host removed this name. Pick another one.':'The host started a new game. Join again with the new code.'}</p><button class="btn" id="rejoin">JOIN AGAIN</button></div>`;
+  }else{
+    const s=PL.state;
+    if(s.phase==='lobby')h+=`<div class="win center"><div>${SPR.invader}</div><p class="big g">YOU'RE IN!</p><p class="pq">${esc(s.name)}</p><p class="hint">Watch the big screen. ${s.nPlayers} player${s.nPlayers===1?'':'s'} so far.</p></div>`;
+    else if(s.phase==='round')h+=`<div class="win center"><span class="pstat">ROUND ${s.roundId}</span><p class="big y">${esc(String(s.round).toUpperCase())}</p><p class="hint">Get ready…</p></div>`;
+    else if(s.phase==='q'&&!s.revealed){
+      h+=`<div class="win" style="display:grid;gap:12px;margin:12px 6px"><div class="qhead" style="margin:0"><span>Q${s.qn}/${s.total}</span><span>${esc(String(s.round).toUpperCase())}</span></div><p class="pq">${emo(s.q)}</p>
+        <div class="pbtns">${s.labels.map((l,i)=>`<button class="pb ${s.my?(s.my.c===i?'mine':'dim'):''}" data-a="${i}" style="--c:${OCOL[i]}" ${s.my?'disabled':''}><span class="k">${'ABCD'[i]}</span>${emo(l)}</button>`).join('')}</div>
+        ${s.my?`<p class="pts">LOCKED IN: ${'ABCD'[s.my.c]}. WAIT FOR THE REVEAL</p>`:''}</div>`;
+    }else if(s.phase==='q'){
+      const m=s.my;
+      h+=`<div class="win center"><span class="pstat">Q${s.qn}</span>${m?(m.ok?`<p class="big g">CORRECT!</p><p class="pts">+${m.pts}</p>`:`<p class="big b">NOPE!</p><p class="hint">You said ${'ABCD'[m.c]}. Right answer: ${'ABCD'[s.correct]}</p>`):`<p class="big b">TOO SLOW!</p><p class="hint">Right answer: ${'ABCD'[s.correct]}</p>`}
+        <p class="hint">${emo(s.labels[s.correct])}</p><p class="pts">${fmt(s.score)} PTS • #${s.rank} OF ${s.nPlayers}</p></div>`;
+    }else if(s.phase==='board')h+=`<div class="win center"><span class="pstat">AFTER ROUND ${s.roundId}</span><p class="big y">#${s.rank} OF ${s.nPlayers}</p><p class="pts">${fmt(s.score)} PTS</p></div>`;
+    else if(s.phase==='final')h+=`<div class="win center">${s.rank===1?SPR.crown+'<p class="big y">WINNER!</p>':`<p class="big y">#${s.rank} OF ${s.nPlayers}</p>`}<p class="pts">${fmt(s.score)} PTS</p><p class="hint">Winner: ${esc((s.top||[])[0]||'')}</p></div>`;
+  }
+  h+=`<div class="pstat" id="pstat">${PL.screen==='join'?'':esc(pStatusText())}</div></div>`;
+  app().innerHTML=h;pbind();
+}
+function pbind(){
+  const f=$('#jf');if(f)f.onsubmit=e=>{e.preventDefault();const code=(($('#code')&&$('#code').value)||PL.code).toUpperCase().replace(/[^A-Z0-9]/g,'');const name=cleanName($('#name').value);
+    if(code.length!==4){PL.err='The game code has 4 characters.';PL.name=name;prender();return}
+    if(!name){PL.err='Type a name, 16 characters max.';PL.code=code;prender();return}
+    PL.err='';PL.code=code;PL.name=name;if(!P.get('room'))history.replaceState(null,'',location.pathname+'?room='+code+(LOCAL?'&local':''));pStart()};
+  document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>pAnswer(+b.dataset.a));
+  const hb=$('#hostbtn');if(hb)hb.onclick=()=>hostLanding();
+  const rj=$('#rejoin');if(rj)rj.onclick=()=>location.reload();
+}
+
+/* =========================================================== BOOT =========================================================== */
+function hostLanding(){
+  const saved=LS.get(HK,null);
+  if(saved&&saved.code&&saved.players){
+    app().innerHTML=`<div class="win title"><h1>HOST</h1><p>A game with code <b>${esc(saved.code)}</b> and ${Object.keys(saved.players).length} players is saved on this computer.</p><div class="cta"><button class="btn" id="res">▶ RESUME ${esc(saved.code)}</button><button class="btn ghost" id="new">NEW GAME</button></div></div>`;
+    $('#res').onclick=()=>{H=saved;startHost(true)};$('#new').onclick=()=>startHost(false);
+  }else startHost(false);
+}
+(function boot(){
+  if(P.has('host')){hostLanding();return}
+  PL.code=(P.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+  PL.name=LS.get('scq-name','')||'';
+  if(PL.code&&PL.name&&LS.get('scq-room','')===PL.code&&LS.get('scq-cid-'+PL.code,null)){pStart();return}
+  prender();
+})();
+</script>
+</body>
+</html>
