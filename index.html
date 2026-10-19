@@ -292,7 +292,7 @@ function startHost(resume){
     c.on('close',()=>{if(c.cid&&conns[c.cid]===c){delete conns[c.cid];refreshLive()}})}});
   hrender();
 }
-function statusHTML(){const on=hostStatus==='online';return `<span class="status ${on?'on':''}" id="hstat"><i></i>${on?'LIVE':esc(hostStatus.toUpperCase())}</span>`}
+function statusHTML(){if(LOCAL)return `<span class="status" id="hstat" style="color:var(--coin)"><i style="background:var(--coin)"></i>TEST MODE (THIS BROWSER ONLY)</span>`;const on=hostStatus==='online';return `<span class="status ${on?'on':''}" id="hstat"><i></i>${on?'LIVE':esc(hostStatus.toUpperCase())}</span>`}
 
 function hostMsg(c,d){
   if(!d||typeof d!=='object')return;
@@ -300,7 +300,9 @@ function hostMsg(c,d){
     const cid=String(d.cid||'').slice(0,40),name=cleanName(d.name);if(!cid||!name)return;
     if(H.banned.includes(cid)){c.send({t:'kicked'});return}
     let p=H.players[cid],isNew=!p;
-    if(!p)p=H.players[cid]={name:uniqueName(name,cid),ans:{}};
+    if(!p){const old=Object.entries(H.players).find(([k,x])=>x.name.toLowerCase()===name.toLowerCase()&&!conns[k]);
+      if(old){p=H.players[cid]=old[1];delete H.players[old[0]];isNew=false;dlog('rejoined by name',name)}
+      else p=H.players[cid]={name:uniqueName(name,cid),ans:{}}}
     else if(H.pos===0&&name!==p.name)p.name=uniqueName(name,cid);
     if(conns[cid]&&conns[cid]!==c){try{conns[cid].close()}catch(e){}}
     c.cid=cid;conns[cid]=c;saveH();sendState(cid);refreshLive();if(isNew)sfx('join');
@@ -366,7 +368,7 @@ function hrender(){
   if(it.t==='lobby'){
     const url=joinURL();
     h+=`<div class="win title"><div class="row">${SPR.invader}${SPR.coin}${SPR.heart}</div><h1>STRUCTURE CAPITAL QUIZ</h1>
-      <div class="lobby"><div id="qr" aria-label="QR code to join"></div><div class="steps">
+      ${LOCAL?`<p style="color:var(--bad);max-width:none"><b style="color:var(--bad)">TEST MODE:</b> phones cannot join. Only other tabs in this browser can. For the real game, open <span style="color:var(--cyan)">${esc(location.origin+location.pathname)}?host</span> without &amp;local.</p>`:''}<div class="lobby">${LOCAL?'':'<div id="qr" aria-label="QR code to join"></div>'}<div class="steps">
         <div class="s">1. Scan the code or open</div><div class="url">${esc(url.replace(/\?.*/,''))}</div>
         <div class="s">2. Enter the game code</div><div class="code">${H.code}</div>
         <div class="s">3. Pick a name and wait for the start</div></div></div>
@@ -454,7 +456,7 @@ function prender(){
       <form id="jf" class="phone" style="gap:12px;text-align:left" novalidate>
       ${P.get('room')?'':`<div class="field"><label for="code">GAME CODE</label><input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" value="${esc(PL.code)}"></div>`}
       <div class="field"><label for="name">YOUR NAME</label><input id="name" maxlength="16" autocomplete="nickname" value="${esc(PL.name)}" placeholder="e.g. Emoji Queen"></div>
-      <div class="err" id="jerr">${esc(PL.err)}</div><button class="btn" type="submit">▶ JOIN</button></form>
+      ${LOCAL?'<p class="hint" style="color:var(--coin)">TEST MODE: only works in the same browser as the host.</p>':''}<div class="err" id="jerr">${esc(PL.err)}</div><button class="btn" type="submit">▶ JOIN</button></form>
       ${P.get('room')?'':'<button class="chip" id="hostbtn" style="margin-top:8px">I AM THE HOST</button>'}</div>`;
   }else if(PL.screen==='wait'){
     const secs=Math.round((Date.now()-(PL.waitStart||Date.now()))/1000);
