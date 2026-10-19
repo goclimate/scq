@@ -253,6 +253,9 @@ function creditsHTML(){return `<div class="credits" id="credits" aria-label="End
   if(c[0]==='h')return `<h2 class="ch">${esc(c[1])}</h2>`;if(c[0]==='s')return `<p class="cs">${esc(c[1])}</p>`;if(c[0]==='t')return `<h3 class="ct">${esc(c[1])}</h3>`;
   if(c[0]==='l')return `<p class="cl">${esc(c[1])}</p>`;if(c[0]==='r')return `<div class="cr"><span>${esc(c[1])}</span><b>${esc(c[2])}</b></div>`;return '<div class="cg"></div>'}).join('')}</div>
   <div class="cbar"><button class="chip" id="cback">◀ BACK</button><button class="chip" id="cfast">FAST ▶▶</button></div></div>`}
+function openCredits(){if(document.querySelector('.credits'))return;const w=document.createElement('div');w.innerHTML=creditsHTML();const el=w.firstElementChild;el.classList.add('overlay');document.body.appendChild(el);
+  const prev=music.want;music.set('theme');const close=()=>{el.remove();music.set(prev);document.removeEventListener('keydown',esc_)};const esc_=e=>{if(e.key==='Escape')close()};document.addEventListener('keydown',esc_);bindCredits(close)}
+const creditsOpen=()=>!!document.querySelector('.credits.overlay');
 function bindCredits(onBack){const b=document.getElementById('cback');if(b)b.onclick=onBack;const f=document.getElementById('cfast'),r=document.querySelector('.credits .roll');
   if(f&&r)f.onclick=()=>{const fast=f.getAttribute('aria-pressed')==='true';f.setAttribute('aria-pressed',String(!fast));r.getAnimations().forEach(a=>a.playbackRate=fast?1:4)}}
 
@@ -491,11 +494,11 @@ function hrender(){
   music.set(it.t==='q'?(H.revealed?null:'think'):'theme');
   if(it.t==='credits'){app().innerHTML=creditsHTML();bindCredits(hBack);return}
   const q=curQ();
-  let h=`<div class="bar"><span class="logo">STRUCTURE CAPITAL QUIZ</span><span class="meta">${it.t!=='lobby'?`<span>JOIN: <span style="color:var(--coin)">${H.code}</span></span>`:''}${q?`<span>Q ${q.n}/${QS.length}</span>`:''}${statusHTML()}<button class="chip" id="bT" aria-pressed="${H.timer}">TIMER</button><button class="chip" id="bM" aria-pressed="${H.music}">MUSIC</button><button class="chip" id="bS" aria-pressed="${H.sfx}">SFX</button></span></div>`;
+  let h=`<div class="bar"><span class="logo">STRUCTURE CAPITAL QUIZ</span><span class="meta">${it.t!=='lobby'?`<span>JOIN: <span style="color:var(--coin)">${H.code}</span></span>`:''}${q?`<span>Q ${q.n}/${QS.length}</span>`:''}${statusHTML()}<button class="chip" id="bT" aria-pressed="${H.timer}">TIMER</button><button class="chip" id="bM" aria-pressed="${H.music}">MUSIC</button><button class="chip" id="bS" aria-pressed="${H.sfx}">SOUND FX</button><button class="chip" id="bC">CREDITS</button></span></div>`;
   if(it.t==='lobby'){
     const url=joinURL();
     h+=`<div class="win title"><div class="row">${SPR.invader}${SPR.coin}${SPR.heart}</div><h1>STRUCTURE CAPITAL QUIZ</h1>
-      ${LOCAL?`<p style="color:var(--bad);max-width:none"><b style="color:var(--bad)">TEST MODE:</b> phones cannot join. Only other tabs in this browser can. For the real game, open <span style="color:var(--cyan)">${esc(location.origin+location.pathname)}?host</span> without &amp;local.</p>`:''}<div class="lobby">${LOCAL?'':'<div id="qr" aria-label="QR code to join"></div>'}<div class="steps">
+      ${LOCAL?`<p style="color:var(--bad);max-width:none"><b style="color:var(--bad)">TEST MODE:</b> phones cannot join. Only other tabs in this browser can. For the real game, open <span style="color:var(--cyan)">${esc(location.origin+location.pathname)}?host</span> without &amp;local.</p>`:''}${LOCAL?`<a class="btn" href="${esc(joinURL())}" target="_blank" rel="noopener">▶ OPEN A TEST PLAYER TAB</a>`:''}<div class="lobby">${LOCAL?'':'<div id="qr" aria-label="QR code to join"></div>'}<div class="steps">
         <div class="s">1. Scan the code or open</div><div class="url">${esc(url.replace(/\?.*/,''))}</div>
         <div class="s">2. Enter the game code</div><div class="code">${H.code}</div>
         <div class="s">3. Pick a name and wait for the start</div></div></div>
@@ -543,6 +546,7 @@ let newArm=false;
 function hbind(){
   $('#bT').onclick=()=>{H.timer=!H.timer;saveH();hrender()};
   $('#bM').onclick=()=>{H.music=AUDIO.music=!H.music;saveH();music.sync();hrender()};
+  $('#bC').onclick=openCredits;
   $('#bS').onclick=()=>{H.sfx=AUDIO.sfx=!H.sfx;saveH();hrender()};
   if($('#go'))$('#go').onclick=hAdvance;
   if($('#back'))$('#back').onclick=hBack;
@@ -550,7 +554,7 @@ function hbind(){
     newArm=false;Object.values(conns).forEach(c=>{try{c.send({t:'ended'});c.close()}catch(e){}});LS.set(HK,null);location.href=location.pathname+'?host'+MODEQ};
   bindKick();
 }
-document.addEventListener('keydown',e=>{if(!H)return;const tg=(e.target&&e.target.tagName)||'';if(tg==='INPUT')return;if(tg==='BUTTON'&&(e.key==='Enter'||e.key===' '))return;
+document.addEventListener('keydown',e=>{if(!H||creditsOpen())return;const tg=(e.target&&e.target.tagName)||'';if(tg==='INPUT')return;if(tg==='BUTTON'&&(e.key==='Enter'||e.key===' '))return;
   if(e.key===' '||e.key==='Enter'||e.key==='ArrowRight'){e.preventDefault();hAdvance()}else if(e.key==='ArrowLeft')hBack()});
 setInterval(()=>{if(H&&hflow[H.pos].t==='q'&&!H.revealed)broadcast()},5000);
 
@@ -589,7 +593,7 @@ function prender(){
       ${P.get('room')?'':'<button class="chip" id="hostbtn" style="margin-top:8px">I AM THE HOST</button>'}</div>`;
   }else if(PL.screen==='wait'){
     const secs=Math.round((Date.now()-(PL.waitStart||Date.now()))/1000);
-    h+=`<div class="win center"><div>${SPR.coin}</div><p class="big y">JOINING ${esc(PL.code)}…</p><p class="pts">${esc(pStatusText()||'STARTING…')}</p>${secs>12?`<p class="hint">Still trying (${secs} s). Check that the big screen shows <b>LIVE</b> and the code <b>${esc(PL.code)}</b>. On office Wi-Fi? Try mobile data.</p>`:''}</div>`;
+    h+=`<div class="win center"><div>${SPR.coin}</div><p class="big y">JOINING ${esc(PL.code)}…</p><p class="pts">${esc(pStatusText()||'STARTING…')}</p>${secs>12?`<p class="hint">Still trying (${secs} s). Check that the big screen shows <b>LIVE</b> and the code <b>${esc(PL.code)}</b>. If it says TEST MODE instead, reopen the host as <b>?host</b>. On office Wi-Fi? Try mobile data.</p>`:''}</div>`;
   }else if(PL.screen==='kicked'||PL.screen==='ended'){
     h+=`<div class="win center"><p class="big b">${PL.screen==='kicked'?'REMOVED':'GAME ENDED'}</p><p class="hint">${PL.screen==='kicked'?'The host removed this name. Pick another one.':'The host started a new game. Join again with the new code.'}</p><button class="btn" id="rejoin">JOIN AGAIN</button></div>`;
   }else{
@@ -630,6 +634,7 @@ function hostLanding(){
   }else startHost(false);
 }
 (function boot(){
+  if(P.has('credits')||location.hash==='#credits'){app().innerHTML=creditsHTML();music.set('theme');bindCredits(()=>{location.href=location.pathname});return}
   if(P.has('host')){hostLanding();return}
   PL.code=(P.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
   PL.name=LS.get('scq-name','')||'';
