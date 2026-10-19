@@ -6,6 +6,7 @@
 <title>Structure Capital Quiz Live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -205,7 +206,10 @@ function optHTML(o,i,opts){opts=opts||{};const cls=opts.revealed?(o.ok?'right':'
 
 const PFX='structure-capital-quiz-v1-';
 const P=new URLSearchParams(location.search);
-const LOCAL=P.has('local');
+const LOCAL=P.has('local');const P2P=P.has('p2p');
+const BROKER=P.get('broker')||'wss://broker.emqx.io:8084/mqtt';
+const TOP='structure-capital-quiz/v1/';
+const MODEQ=(LOCAL?'&local':'')+(P2P?'&p2p':'')+(P.get('broker')?'&broker='+encodeURIComponent(P.get('broker')):'');
 const T_MS=20000;
 const app=()=>document.getElementById('app');
 const $=s=>document.querySelector(s);
@@ -223,6 +227,19 @@ const Transport={
         else if(m.type==='data'&&conns[m.from])conns[m.from].emit('data',m.data);
         else if(m.type==='close'&&conns[m.from]){conns[m.from].emit('close');delete conns[m.from]}};
       bc.postMessage({to:'*',from:'host',type:'hostup'});cb.onStatus('online');return}
+    if(!P2P){
+      if(!window.mqtt){cb.onStatus('Relay library did not load. Check the internet connection.');return}
+      const T=TOP+code,conns={};
+      const cl=mqtt.connect(BROKER,{clientId:'scqh-'+code+'-'+rid(),keepalive:20,reconnectPeriod:2000,connectTimeout:10000,will:{topic:T+'/up',payload:'0',retain:true,qos:1}});
+      const to=(id,msg)=>cl.publish(T+'/p/'+id,JSON.stringify(msg),{qos:1});
+      cl.on('connect',()=>{dlog('host relay connected',BROKER);cl.subscribe(T+'/h',{qos:1});cl.publish(T+'/up','1',{retain:true,qos:1});cl.publish(T+'/all',JSON.stringify({type:'hostup'}),{qos:1});cb.onStatus('online')});
+      cl.on('reconnect',()=>cb.onStatus('reconnecting'));cl.on('offline',()=>cb.onStatus('offline, retrying'));
+      cl.on('error',e=>{dlog('host relay error',String(e&&e.message||e));cb.onStatus('problem: '+(e&&e.message||e))});
+      cl.on('message',(topic,buf)=>{let m;try{m=JSON.parse(buf.toString())}catch(e){return}if(!m||!m.from)return;
+        if(m.type==='open'){if(conns[m.from])conns[m.from].emit('close');const c=conns[m.from]=mkConn(d=>to(m.from,{type:'data',data:d}));to(m.from,{type:'ack'});dlog('player opened',m.from);cb.onConn(c)}
+        else if(m.type==='data'&&conns[m.from])conns[m.from].emit('data',m.data);
+        else if(m.type==='close'&&conns[m.from]){dlog('player closed',m.from);conns[m.from].emit('close');delete conns[m.from]}});
+      return}
     if(!window.Peer){cb.onStatus('PeerJS did not load. Check the internet connection.');return}
     let peer;
     const start=()=>{peer=new Peer(PFX+code,{debug:0});
@@ -242,6 +259,23 @@ const Transport={
         else if(m.type==='data'&&c)c.emit('data',m.data)};
       cb.onStatus('connecting');hello();setInterval(hello,1500);
       addEventListener('pagehide',()=>bc.postMessage({to:'host',from:id,type:'close'}));return}
+    if(!P2P){
+      if(!window.mqtt){cb.onStatus('Relay library did not load. Check the internet connection.');return}
+      const T=TOP+code,id=rid();let c=null,sentAt=0;
+      const cl=mqtt.connect(BROKER,{clientId:'scqp-'+id,keepalive:20,reconnectPeriod:2000,connectTimeout:10000,will:{topic:T+'/h',payload:JSON.stringify({from:id,type:'close'}),qos:1}});
+      const hello=()=>{if(c||!cl.connected)return;sentAt=Date.now();cl.publish(T+'/h',JSON.stringify({from:id,type:'open'}),{qos:1})};
+      cl.on('connect',()=>{dlog('player relay connected');c=null;cb.onStatus('connecting');cl.subscribe([T+'/p/'+id,T+'/all',T+'/up'],{qos:1},()=>hello())});
+      cl.on('reconnect',()=>{c=null;cb.onStatus('lost')});cl.on('offline',()=>{c=null;cb.onStatus('network')});
+      cl.on('error',e=>{dlog('player relay error',String(e&&e.message||e));cb.onStatus('network')});
+      cl.on('message',(topic,buf)=>{const s=buf.toString();
+        if(topic===T+'/up'){dlog('host is',s==='1'?'online':'offline');if(s==='1')hello();else{c=null;cb.onStatus('nohost')}return}
+        let m;try{m=JSON.parse(s)}catch(e){return}if(!m)return;
+        if(m.type==='hostup'){dlog('host came back');c=null;hello();return}
+        if(m.type==='ack'){c=mkConn(d=>cl.publish(T+'/h',JSON.stringify({from:id,type:'data',data:d}),{qos:1}));dlog('joined');cb.onStatus('online');cb.onOpen(c)}
+        else if(m.type==='data'&&c)c.emit('data',m.data)});
+      setInterval(()=>{if(!c&&cl.connected){if(sentAt&&Date.now()-sentAt>5000)cb.onStatus('nohost');hello()}},3000);
+      addEventListener('pagehide',()=>{try{cl.publish(T+'/h',JSON.stringify({from:id,type:'close'}),{qos:0})}catch(e){}});
+      return}
     if(!window.Peer){cb.onStatus('PeerJS did not load. Check the internet connection.');return}
     const peer=new Peer({debug:DEBUG?2:0});let attempt=0,retryT=null;dlog('player peer created');
     const retry=ms=>{clearTimeout(retryT);retryT=setTimeout(connect,ms)};
@@ -274,7 +308,7 @@ hflow.push({t:'final'});
 const CODE_CH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode=()=>Array.from({length:4},()=>CODE_CH[Math.floor(Math.random()*CODE_CH.length)]).join('');
 const saveH=()=>LS.set(HK,H);
-const joinURL=()=>location.origin+location.pathname+'?room='+H.code+(LOCAL?'&local':'');
+const joinURL=()=>location.origin+location.pathname+'?room='+H.code+MODEQ;
 const scoreOf=p=>H.revealedQs.reduce((s,id)=>s+((p.ans[id]&&p.ans[id].pts)||0),0);
 function ranked(){const arr=Object.entries(H.players).map(([cid,p])=>({cid,name:p.name,score:scoreOf(p)})).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'sv'));
   let last=null,rank=0;arr.forEach((x,i)=>{if(x.score!==last){rank=i+1;last=x.score}x.rank=rank});return arr}
@@ -285,7 +319,7 @@ const curQ=()=>{const it=hflow[H.pos];return it.t==='q'?it.q:null};
 function startHost(resume){
   if(!resume)H={code:makeCode(),pos:0,revealed:false,openedAt:0,players:{},banned:[],revealedQs:[],timer:true,music:true,sfx:true};
   AUDIO.music=H.music;AUDIO.sfx=H.sfx;saveH();
-  history.replaceState(null,'',location.pathname+'?host'+(LOCAL?'&local':''));
+  history.replaceState(null,'',location.pathname+'?host'+MODEQ+(DEBUG?'&debug':''));
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
   Transport.host(H.code,{onStatus:s=>{hostStatus=s;const el=$('#hstat');if(el)el.outerHTML=statusHTML()},onConn:c=>{
     c.on('data',d=>hostMsg(c,d));
@@ -418,7 +452,7 @@ function hbind(){
   if($('#go'))$('#go').onclick=hAdvance;
   if($('#back'))$('#back').onclick=hBack;
   const ng=$('#newgame');if(ng)ng.onclick=()=>{if(!newArm){newArm=true;ng.textContent='SURE? TAP AGAIN';ng.classList.add('danger');setTimeout(()=>{newArm=false;if(ng.isConnected){ng.textContent='NEW GAME';ng.classList.remove('danger')}},3000);return}
-    newArm=false;Object.values(conns).forEach(c=>{try{c.send({t:'ended'});c.close()}catch(e){}});LS.set(HK,null);location.href=location.pathname+'?host'+(LOCAL?'&local':'')};
+    newArm=false;Object.values(conns).forEach(c=>{try{c.send({t:'ended'});c.close()}catch(e){}});LS.set(HK,null);location.href=location.pathname+'?host'+MODEQ};
   bindKick();
 }
 document.addEventListener('keydown',e=>{if(!H)return;const tg=(e.target&&e.target.tagName)||'';if(tg==='INPUT')return;if(tg==='BUTTON'&&(e.key==='Enter'||e.key===' '))return;
@@ -485,7 +519,7 @@ function pbind(){
   const f=$('#jf');if(f)f.onsubmit=e=>{e.preventDefault();const code=(($('#code')&&$('#code').value)||PL.code).toUpperCase().replace(/[^A-Z0-9]/g,'');const name=cleanName($('#name').value);
     if(code.length!==4){PL.err='The game code has 4 characters.';PL.name=name;prender();return}
     if(!name){PL.err='Type a name, 16 characters max.';PL.code=code;prender();return}
-    PL.err='';PL.code=code;PL.name=name;if(!P.get('room'))history.replaceState(null,'',location.pathname+'?room='+code+(LOCAL?'&local':''));pStart()};
+    PL.err='';PL.code=code;PL.name=name;if(!P.get('room'))history.replaceState(null,'',location.pathname+'?room='+code+MODEQ);pStart()};
   document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>pAnswer(+b.dataset.a));
   const hb=$('#hostbtn');if(hb)hb.onclick=()=>hostLanding();
   const rj=$('#rejoin');if(rj)rj.onclick=()=>location.reload();
